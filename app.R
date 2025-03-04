@@ -1,5 +1,6 @@
 #library(colourpicker)
 library(shiny)
+# library(shinyjs)
 # library(reactlog)
 library(sf)
 library(tidyverse)
@@ -22,6 +23,8 @@ library(magick)
 # library(ggforce)
 # library(plotly)
 library(redcapAPI)
+
+
 
 options(shiny.maxRequestSize = 25*1024^2)
 
@@ -576,17 +579,39 @@ ui <- dashboardPage(
       ########## MAIN PAGE COLUMN 2 STARTS HERE: ##############
       ########## MAIN PAGE COLUMN 2 STARTS HERE: ##############
       ########## MAIN PAGE COLUMN 2 STARTS HERE: ##############
-      
       column(width = 5,
              conditionalPanel(
                condition = "input.all_points_recorded == true",
                box(width = 12,
                    conditionalPanel(condition = "input.add_rod == true",
-                                    
+                                    useSweetAlert(),
                                     div(
                                       style = "text-align: center;",
-                                      downloadButton(outputId = "download_rod_template", label = "Download Rod Template to Scale", icon = icon("download")), 
-                                      h5(p(em("Open in Adobe Acrobate & Print as 'Poster' at 100% Scale.")))
+                                      downloadButton(outputId = "download_rod_template",
+                                                     label = "Download Rod Template", 
+                                                     icon = icon("download"),
+                                                     class = "d-flex justify-content-center",
+                                                     style = "font-size: 18px; 
+                                                     padding: 12px 25px; 
+                                                     background-color: #007BFF; 
+                                                     color: white; 
+                                                     border: none;
+                                                     display: block;
+                                                     border-radius: 6px; 
+                                                     font-weight: bold;
+                                                     margin-left: 10px;
+                                                     margin-right: 10px;"
+                                                     ),
+                                      tags$script(HTML("
+                                      $(document).ready(function(){
+                                      $('#download_rod_template').on('click', function() {
+                                      setTimeout(function(){
+                                      Shiny.setInputValue('downloadFinished', Date.now());
+                                      }, 1000);
+                                      });
+                                      });
+                                                       ")),
+                                      h5(p(em("Open in Adobe Acrobat & Print as 'Poster' at 100% Scale.")))
                                     )
                    ),
                    plotOutput(outputId = "preop_spine_simulation_plot",
@@ -616,7 +641,7 @@ ui <- dashboardPage(
                      column(width = 6, 
                             conditionalPanel(condition = "input.add_rod == true",
                                              fluidRow(
-                                               column(6, div(style = "display: flex; align-items: right; height: 100%;", strong("Rod Smoothing:"))),
+                                               column(6, div(style = "display: flex; align-items: right; height: 100%;", strong("Rod Detail:"))),
                                                column(6, numericInput(inputId = "rod_knots",label = NULL, value = 6, min = 2))
                                              )
                             )
@@ -684,7 +709,7 @@ ui <- dashboardPage(
                  label = "Reset",
                  style = "unite",
                  color = "danger",
-                 icon = icon("reset")
+                 icon = icon("arrow-rotate-left")
                ),
                tableOutput(outputId = "spine_segmental_planning_df")
              
@@ -2227,6 +2252,7 @@ server <- function(input, output, session) {
     
   })
   
+
   output$download_rod_template <- downloadHandler(
     
     filename = function() {
@@ -2248,9 +2274,21 @@ server <- function(input, output, session) {
              height = plot_height_mm / 10, 
              units = "cm", 
              dpi = 300)
+      
     }
   )
   
+
+  # 2) When the browser signals "downloadFinished", show a SweetAlert
+  observeEvent(input$downloadFinished, {
+    sendSweetAlert(
+      session = session,
+      title = "Download Complete",
+      text = h2(p(em("To Print: Open in Adobe Acrobat & Print as 'Poster' at 100% Scale."))),
+      type = "success"
+    )
+  })
+
   
 }
 
