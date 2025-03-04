@@ -25,146 +25,33 @@ library(redcapAPI)
 
 options(shiny.maxRequestSize = 25*1024^2)
 
-source("jh_functions.R", local = TRUE)
+# source("jh_functions.R", local = TRUE)
 source("shiny_functions.R", local = TRUE)
 source("jh_calculation_functions.R", local = TRUE)
-source("compute_segment_angles_function_from_sim_data_2024.R", local = TRUE)
-source("function_segment_angles_separated.R", local = TRUE)
+source("jh_spine_coordinate_geometry_functions.R", local = TRUE)
+# source("compute_segment_angles_function_from_sim_data_2024.R", local = TRUE)
+# source("function_segment_angles_separated.R", local = TRUE)
 
-source("jh_spine_build_NEW_function.R", local = TRUE)
+# source("jh_spine_build_NEW_function.R", local = TRUE)
 
-source("jh_prescribing_alignment_functions.R", local = TRUE)
+# source("jh_prescribing_alignment_functions.R", local = TRUE)
 
-source("spinal_regional_alignment_analysis_by_vpa.R", local = TRUE)
+# source("spinal_regional_alignment_analysis_by_vpa.R", local = TRUE)
 
-source("jh_build_spine_by_vertebral_pelvic_angles_cleaned.R", local = TRUE)
-source("prescribing_alignment_by_matching_unfused.R", local = TRUE)
-source("xray_segment_angles_model_functions.R", local = TRUE)
-source("build_spine_from_coordinates_functions.R", local = TRUE)
+# source("jh_build_spine_by_vertebral_pelvic_angles_cleaned.R", local = TRUE)
+# source("prescribing_alignment_by_matching_unfused.R", local = TRUE)
+# source("xray_segment_angles_model_functions.R", local = TRUE)
+source("jh_build_spine_from_coordinates_functions.R", local = TRUE)
 
 
 
-# Define the labels for both modes
-get_spine_labels <- function(all_centroids = FALSE) {
-  if (all_centroids) {
-    return(c("fem_head_center", 
-             "s1_anterior_superior", "s1_posterior_superior", 
-             "l5_centroid", "l4_centroid", "l3_centroid", "l2_centroid", "l1_centroid", 
-             "t12_centroid", "t11_centroid", "t10_centroid", "t9_centroid", 
-             "t8_centroid", "t7_centroid", "t6_centroid", "t5_centroid", 
-             "t4_centroid", "t3_centroid", "t2_centroid", "t1_centroid", 
-             "c7_centroid", "c6_centroid", "c5_centroid", "c4_centroid", "c3_centroid", 
-             "c2_centroid"))
-  } else {
-    return(c("fem_head_center", 
-             "s1_anterior_superior", "s1_posterior_superior", 
-             "l4_centroid", "l1_centroid", "t9_centroid", "t4_centroid", 
-             "t1_centroid", "c2_centroid", 'calibration_1', 'calibration_2'))
-  }
-}
 
-compute_perpendicular_points <- function(x1, y1, x2, y2, distance = 0.01) {
-  # Midpoint
-  midpoint_x <- (x1 + x2) / 2
-  midpoint_y <- (y1 + y2) / 2
-  
-  # Slope of the line (tangent)
-  slope <- (y2 - y1) / (x2 - x1)
-  
-  # Perpendicular slope (-1 / slope)
-  perpendicular_slope <- -1 / slope
-  
-  # Calculate the change in x and y for perpendicular points
-  delta_x <- distance / sqrt(1 + perpendicular_slope^2)
-  delta_y <- perpendicular_slope * delta_x
-  
-  # Two perpendicular points
-  point_1 <- c(midpoint_x + delta_x, midpoint_y + delta_y)
-  point_2 <- c(midpoint_x - delta_x, midpoint_y - delta_y)
-  
-  return(tibble(x1 = point_1[1], y1 = point_1[2], x2 = point_2[1], y2 = point_2[2]))
-}
 
-calculate_pelvic_incidence_line_coordinates <- function(fem_head_center = c(0,0), 
-                                                        s1_anterior, 
-                                                        s1_posterior, 
-                                                        spine_facing = "left",
-                                                        pelvic_tilt = 10, 
-                                                        pelvic_incidence_value = 50) {
-  
-  # Step 1: Calculate the center (midpoint)
-  center_x <- (s1_anterior[1] + s1_posterior[1]) / 2
-  center_y <- (s1_anterior[2] + s1_posterior[2]) / 2
-  center <- c(center_x, center_y)
-  
-  # Step 2: Calculate the length of the line between s1_anterior and s1_posterior
-  line_length <- sqrt((s1_anterior[1] - s1_posterior[1])^2 + (s1_anterior[2] - s1_posterior[2])^2)
-  
-  # Step 4: Calculate the length of the perpendicular line (5 times the original length)
-  extended_length <- 3 * line_length
-  
-  if (s1_anterior[1] == s1_posterior[1]) {
-    # For vertical lines, the perpendicular is horizontal
-    dx <- extended_length
-    dy <- 0
-  } else if (s1_anterior[2] == s1_posterior[2]) {
-    # For horizontal lines, the perpendicular is vertical
-    dx <- 0
-    dy <- extended_length
-  } else {
-    pt_pi_diff <- pelvic_incidence_value - pelvic_tilt
-    
-    pt_pi_diff_rad <- pt_pi_diff*(pi/180)
-    
-    orientation_modifier <- if_else(spine_facing == "left", -1, 1)
-    
-    dx <- sin(pt_pi_diff_rad)*extended_length*orientation_modifier
-    dy <- cos(pt_pi_diff_rad)*extended_length
-  }
-  
-  # Inferior point is displaced from the center by (dx, dy)
-  inferior_x <- center[1] - dx
-  inferior_y <- center[2] - dy
-  inferior <- c(inferior_x, inferior_y)
-  
-  pi_line_coordinates_df <- tibble(spine_point = c("fem_head_center", "s1_center", "s1_inferior"), 
-                                   x = c(fem_head_center[1], 
-                                         center[1],
-                                         inferior_x),
-                                   y = c(fem_head_center[2],
-                                         center[2],
-                                         inferior_y)
-  )
-  # Return the center and inferior points as a list
-  # return(list(center = center, inferior = inferior))
-  pi_line_coordinates_df
-}
+
 
 # all_possible_lumbar_segments_angles_with_lpa_df <- read_csv("all_possible_lumbar_segment_angles_for_lpa.csv")
 
 # reactlog_enable()
-
-spinal_segments_labels_vector <- c('L5-S1', 'L4-L5', 'L3-L4', 'L2-L3', 'L1-L2', 
-                                   'T12-L1', 'T11-T12', 'T10-T11', 'T9-T10', 'T8-T9', 'T7-T8', 'T6-T7', 'T5-T6', 'T4-T5', 'T3-T4', 'T2-T3', 'T1-T2',
-                                   'C7-T1', 'C6-C7', 'C5-C6', 'C4-C5', 'C3-C4', 'C2-C3', 'C1-C2')
-
-create_spine_rigid_level_input_function <- function(segment_input_label){
-  segment_id <- paste0("preop_", str_to_lower(str_replace_all(segment_input_label, pattern = "-", "_")), "_segment")
-  rigid_segment_id <- str_replace_all(segment_id, "_segment", "_rigid_xray")
-  segment_label <- segment_input_label
-  div(
-    class = "segment-input",
-    prettyCheckbox(
-      inputId = rigid_segment_id,
-      label = segment_label,
-      value = FALSE,
-      bigger = TRUE,
-      status = "danger",
-      shape = "curve"
-    )
-  )
-  # )
-}
 
 
 ui <- dashboardPage(
@@ -221,30 +108,9 @@ ui <- dashboardPage(
       box(title = "Surgical Planning:", status = "info", width = 12, collapsible = FALSE,
           conditionalPanel(
             condition = "input.xray_file_uploaded == true",
-            h4(strong("Patient Factors:")),
-            sliderInput(
-              "preop_age",
-              "Patient Age:",
-              min = 18,
-              max = 90,
-              value = 60
-            ),
-            radioGroupButtons(
-              inputId = "preop_sex",
-              label = NULL,
-              individual = TRUE,
-              choices = c("Male", "Female"),
-              selected = "Female",
-              checkIcon = list(
-                yes = tags$i(class = "fa fa-check-square", 
-                             style = "color: steelblue"),
-                no = tags$i(class = "fa fa-square-o", 
-                            style = "color: steelblue"))
-            ),
-            hr(),
             conditionalPanel(
               condition = "input.all_points_recorded == true",
-              actionBttn(inputId = "calibrate_button", label = "Calibrate", size = "sm", style = "fill")
+              actionBttn(inputId = "calibrate_button", label = "Calibrate", size = "sm", style = "pill", color = "primary")
             ),
             hr(),
             uiOutput(outputId = "preop_xray_rigid_segments_ui")
@@ -707,96 +573,44 @@ ui <- dashboardPage(
       ########## MAIN PAGE COLUMN 2 STARTS HERE: ##############
       ########## MAIN PAGE COLUMN 2 STARTS HERE: ##############
       
-      # column(width = 3, 
-      #        box(width = 12,
-      #            tableOutput(outputId = "spine_click_parameters")
-      #        )
-      #        ),
-      
-      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
-      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
-      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
-      
-      # column(width = 4, 
-      column(width = 8,
+      column(width = 5,
              conditionalPanel(
                condition = "input.all_points_recorded == true",
-               box(title = "Preop Alignment:", 
-                   width = 12,
+               box(width = 12,
+                   conditionalPanel(condition = "input.add_rod == true",
+                                    
+                                    div(
+                                      style = "text-align: center;",
+                                      downloadButton(outputId = "download_rod_template", label = "Download Rod Template to Scale", icon = icon("download")), 
+                                      h5(p(em("Open in Adobe Acrobate & Print as 'Poster' at 100% Scale.")))
+                                    )
+                   ),
+                   plotOutput(outputId = "preop_spine_simulation_plot",
+                              height = "750px"), 
                    fluidRow(
-                     column(width = 8, 
-                            conditionalPanel(condition = "input.add_rod == true",
-                                             div(
-                                               style = "text-align: center;",
-                                               downloadButton(outputId = "download_rod_template", label = "Download Rod Template to Scale", icon = icon("download")), 
-                                               h5(p(em("Open in Adobe Acrobate & Print as 'Poster' at 100% Scale.")))
-                                             )
-                            ),
-                            plotOutput(outputId = "preop_spine_simulation_plot",
-                                       height = "750px"), 
-                            fluidRow(
-                              column(width = 6, 
-                                     div(
-                                       style = "text-align: center;",
-                                       switchInput(inputId = "add_rod", label = "Add Rod?", value = FALSE, onLabel = "Yes", offLabel = "No")
-                                     )
-                              ),
-                              column(width = 6, 
-                                     conditionalPanel(condition = "input.add_rod == true",
-                                                      radioGroupButtons(
-                                                        inputId = "rod_uiv",
-                                                        label = "UIV:",
-                                                        choices = c("C2", "T2", "T4", "T9", "T10", "T11", "T12", "L1", "L2"),
-                                                        selected = "T4"
-                                                      )
-                                     )
-                              )
-                            ),
-                            tableOutput(outputId = "planning_parameters_table")
+                     column(width = 6, 
+                            div(
+                              style = "text-align: center;",
+                              switchInput(inputId = "add_rod", label = "Add Rod?", value = FALSE, onLabel = "Yes", offLabel = "No")
+                            )
                      ),
-                     column(width = 4, 
-                            
-                            box(width = 12,
-                                title = "Cervical", 
-                                collapsible = TRUE, 
-                                collapsed = TRUE,
-                                tags$table(width = "100%",
-                                           map(.x = jh_spine_levels_factors_df$interspace[1:7], 
-                                               .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
-                                )
-                            ),
-                            box(width = 12,title = "Thoracic", 
-                                collapsible = TRUE, 
-                                collapsed = FALSE,
-                                tags$table(width = "100%",
-                                           map(.x = jh_spine_levels_factors_df$interspace[8:19], 
-                                               .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
-                                )
-                            ),
-                            box(width = 12,title = "Lumbar", 
-                                collapsible = TRUE, 
-                                collapsed = FALSE,
-                                tags$table(width = "100%",
-                                           map(.x = jh_spine_levels_factors_df$interspace[20:24], 
-                                               .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
-                                )
-                            ),
-                            actionBttn(
-                              size = "md",
-                              inputId = "segmental_planning_reset",
-                              block = TRUE,
-                              label = "Reset",
-                              style = "unite",
-                              color = "danger",
-                              icon = icon("reset")
-                            ),
-                            tableOutput(outputId = "spine_segmental_planning_df")
+                     column(width = 6, 
+                            conditionalPanel(condition = "input.add_rod == true",
+                                             radioGroupButtons(
+                                               inputId = "rod_uiv",
+                                               label = "UIV:",
+                                               choices = c("C2", "T2", "T4", "T9", "T10", "T11", "T12", "L1", "L2"),
+                                               selected = "T4"
+                                             )
+                            )
                      )
                    ),
-                   tableOutput("alignment_parameters_df")
-               ), 
+                   tableOutput(outputId = "planning_parameters_table")
+               ),
                box(title = "Coordinate Data:",
                    collapsible = TRUE, collapsed = TRUE,
+                   tableOutput("alignment_parameters_df"),
+                   hr(),
                    tableOutput(outputId = "click_coordinates_df"),
                    br(),
                    textOutput(outputId = "click_coordinates_text"),
@@ -805,47 +619,79 @@ ui <- dashboardPage(
                    h4("Centroid Coordinates:"),
                    tableOutput(outputId = "centroid_coordinates_df"), 
                    br(), 
-                   textOutput("xray_centroid_tibble_text")
+                   verbatimTextOutput("xray_centroid_tibble_text"),
+                   hr(),
+                   verbatimTextOutput("spine_plan_tibble_text"),
+                   
                )
              )
       ),
-      ########## MAIN PAGE COLUMN 4 STARTS HERE: ##############
-      ########## MAIN PAGE COLUMN 4 STARTS HERE: ##############
-      ########## MAIN PAGE COLUMN 4 STARTS HERE: ##############
       
-      # column(width = 5,
-      #          conditionalPanel(
-      #            condition = "input.all_points_recorded == true",
-      #            box(width = 12,
-      #                # title = "Plans",
-      #                actionBttn(
-      #                  inputId = "compute_plan_xray",
-      #                  label = "Compute Plan",
-      #                  style = "unite", 
-      #                  color = "danger"
+      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
+      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
+      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
+      
+      column(width = 3,
+             conditionalPanel(
+               condition = "input.all_points_recorded == true",
+               box(width = 12, title = "Surgical Correction:",
+               box(width = 12,
+                   title = "Cervical", 
+                   collapsible = TRUE, 
+                   collapsed = TRUE,
+                   tags$table(width = "100%",
+                              map(.x = jh_spine_levels_factors_df$interspace[1:7], 
+                                  .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
+                   )
+               ),
+               box(width = 12,title = "Thoracic", 
+                   collapsible = TRUE, 
+                   collapsed = FALSE,
+                   tags$table(width = "100%",
+                              map(.x = jh_spine_levels_factors_df$interspace[8:19], 
+                                  .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
+                   )
+               ),
+               box(width = 12,title = "Lumbar", 
+                   collapsible = TRUE, 
+                   collapsed = FALSE,
+                   tags$table(width = "100%",
+                              map(.x = jh_spine_levels_factors_df$interspace[20:24], 
+                                  .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
+                   )
+               ),
+               actionBttn(
+                 size = "md",
+                 inputId = "segmental_planning_reset",
+                 block = TRUE,
+                 label = "Reset",
+                 style = "unite",
+                 color = "danger",
+                 icon = icon("reset")
+               ),
+               tableOutput(outputId = "spine_segmental_planning_df")
+             
+               )
+      )
+      )
+      
+      # column(width = 8,
+      #        conditionalPanel(
+      #          condition = "input.all_points_recorded == true",
+      #          box(title = "Preop Alignment:", 
+      #              width = 12,
+      #              fluidRow(
+      #                column(width = 8, 
+      # 
       #                ),
-      #                hr(),
-      #                fluidRow(
-      #                  tags$table(width = "100%",
-      #                             map(.x = jh_spine_levels_factors_df$interspace, 
-      #                                 .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
-      #                             )
-      #                  # tabBox(width = 12,
-      #                  #        title = div(style = "float: right;", "Alignment Plans"),  # Moves title to the right
-      #                  #        id = "alignment_plans", 
-      #                  #        tabPanel("Lower T UIV", 
-      #                  #                 # plotOutput(outputId = "spine_plan_lower_t_xray", height = 650), 
-      #                  #                 uiOutput(outputId = "spine_plan_lower_t_ui")
-      #                  #        ),
-      #                  #        tabPanel("Upper T UIV", 
-      #                  #                 # plotOutput(outputId = "spine_plan_upper_t_xray", height = 650),
-      #                  #                 uiOutput(outputId = "spine_plan_upper_t_ui")
-      #                  #        )
-      #                  # )
+      #                column(width = 4, 
+      #                       
+      #                       
       #                )
-      #            )
-      #          )
+      #              ),
+      #          ), 
       #        )
+      # )
     )
   )
 )
@@ -1136,33 +982,88 @@ server <- function(input, output, session) {
   ############ CALIBRATION #####################
   ############ CALIBRATION #####################
   ############ CALIBRATION #####################
+  # observeEvent(list(input$xray_click, input$calibrate_button), ignoreInit = TRUE, {
+  #   calibration_length_modal_function <- function(calibration_length = 100){
+  #     modalDialog(
+  #       easyClose = TRUE,  
+  #       size = "l",  
+  #       h3("Enter Length in mm"),
+  #       fluidRow(
+  #         column(width = 2),
+  #         column(width = 6,
+  #                numericInput(inputId = "calibration_length", 
+  #                             label = "Length (mm):", 
+  #                             value = calibration_length,
+  #                             min = 10, 
+  #                             max = 1000)
+  #         )
+  #       ),
+  #       tags$script(HTML("setTimeout(function() { $('#calibration_length').focus(); }, 100);"))
+  #     )
+  #   }
+  #   
+  #   if(any(names(click_coord_reactive_list$coords) == "calibration_2")){
+  #     showModal(
+  #       calibration_length_modal_function(calibration_length = 100)
+  #     ) 
+  #   }
+  # })
+  # 
+  
+  # UI/Server snippet where the modal is shown:
   observeEvent(list(input$xray_click, input$calibrate_button), ignoreInit = TRUE, {
-    calibration_length_modal_function <- function(calibration_length = 100){
+    calibration_length_modal_function <- function(calibration_length = 100) {
       modalDialog(
         easyClose = TRUE,  
-        size = "l",  
+        size = "l",
         h3("Enter Length in mm"),
         fluidRow(
           column(width = 2),
           column(width = 6,
-                 numericInput(inputId = "calibration_length", 
-                              label = "Length (mm):", 
-                              value = calibration_length,
-                              min = 10, 
-                              max = 1000)
+                 numericInput(
+                   inputId = "calibration_length", 
+                   label   = "Length (mm):", 
+                   value   = calibration_length,
+                   min     = 10, 
+                   max     = 1000
+                 )
           )
         ),
-        tags$script(HTML("setTimeout(function() { $('#calibration_length').focus(); }, 100);"))
+        # JavaScript: focus cursor, then listen for Enter key and set input$calibration_enter_press
+        tags$script(HTML("
+        setTimeout(function() {
+          // focus the numericInput box
+          $('#calibration_length').focus();
+          // close the modal when Enter is pressed
+          $('#calibration_length').on('keydown', function(e) {
+            if(e.key === 'Enter') {
+              // send a signal to Shiny
+              Shiny.setInputValue('calibration_enter_press', true, {priority: 'event'});
+            }
+          });
+        }, 100);
+      "))
       )
     }
     
-    if(any(names(click_coord_reactive_list$coords) == "calibration_2")){
-      showModal(
-        calibration_length_modal_function(calibration_length = 100)
-      ) 
+    # Show modal only when 'calibration_2' is present in click_coord_reactive_list$coords
+    if (any(names(click_coord_reactive_list$coords) == "calibration_2")) {
+      if(length(input$calibration_length)==0){
+        showModal(
+          calibration_length_modal_function(calibration_length = 100)
+        ) 
+      }else{
+        showModal(
+          calibration_length_modal_function(calibration_length = input$calibration_length)
+        )  
+      }
     }
   })
   
+  # Observe the Enter-press signal and remove modal
+  observeEvent(input$calibration_enter_press, {
+    removeModal()
+  })
   
   calibration_list <- reactiveValues(calibration_modifier = 1)
   
@@ -1364,8 +1265,17 @@ server <- function(input, output, session) {
     s1_anterior_superior <- c(click_coord_reactive_list$coords$s1_anterior_superior$x, click_coord_reactive_list$coords$s1_anterior_superior$y)
     s1_posterior_superior <- c(click_coord_reactive_list$coords$s1_posterior_superior$x, click_coord_reactive_list$coords$s1_posterior_superior$y)
     
-    glue("fem_head_center <- c({fem_head_center[1]}, {fem_head_center[2]})\n  s1_anterior_superior <- c({s1_anterior_superior[1]}, {s1_anterior_superior[2]})\n s1_posterior_superior <- c({s1_posterior_superior[1]}, {s1_posterior_superior[2]})\n \n centroid_df <- tibble(spine_point = c('{spine_point_labels}'), x = c({x_values}), y = c({y_values}))")
+
+    glue("fem_head_center <- c({fem_head_center[1]}, {fem_head_center[2]})\n\ns1_anterior_superior <- c({s1_anterior_superior[1]}, {s1_anterior_superior[2]})\n\ns1_posterior_superior <- c({s1_posterior_superior[1]}, {s1_posterior_superior[2]})\n\ncentroid_df <- tibble(spine_point = c('{spine_point_labels}'), x = c({x_values}), y = c({y_values}))")
   })
+  
+  output$spine_plan_tibble_text <- renderText({
+    
+    jh_format_text_to_print_tibble_in_shiny_function(df = spine_simulation_planning_reactive_list$pt_adjusted_rotated_spine_df)
+    
+  })
+  
+  
   
   
   alignment_parameters_reactivevalues_list <- reactiveValues()
@@ -1746,7 +1656,7 @@ server <- function(input, output, session) {
       s1_center <- c((click_coord_reactive_list$coords$s1_anterior_superior$x + click_coord_reactive_list$coords$s1_posterior_superior$x)/2,
                      (click_coord_reactive_list$coords$s1_anterior_superior$y + click_coord_reactive_list$coords$s1_posterior_superior$y)/2)
       
-      pi_df <- calculate_pelvic_incidence_line_coordinates(fem_head_center = c(click_coord_reactive_list$coords$fem_head_center$x, click_coord_reactive_list$coords$fem_head_center$y),
+      pi_df <- jh_calculate_pelvic_incidence_line_coordinates(fem_head_center = c(click_coord_reactive_list$coords$fem_head_center$x, click_coord_reactive_list$coords$fem_head_center$y),
                                                            s1_anterior = c(click_coord_reactive_list$coords$s1_anterior_superior$x, click_coord_reactive_list$coords$s1_anterior_superior$y),
                                                            s1_posterior = c(click_coord_reactive_list$coords$s1_posterior_superior$x, click_coord_reactive_list$coords$s1_posterior_superior$y),
                                                            spine_facing = spine_orientation(),
@@ -2087,6 +1997,7 @@ server <- function(input, output, session) {
         
         pt_adjusted_rotated_spine_df <- rotate_spine_function(spine_df = rotated_spine_coord_df, angle_degrees = pt_change)
         
+        spine_simulation_planning_reactive_list$pt_adjusted_rotated_spine_df <- pt_adjusted_rotated_spine_df
         
         pt_adjusted_rotated_spine_plotting_df <- pt_adjusted_rotated_spine_df %>%
           filter(vert_point != "centroid") %>%
@@ -2107,12 +2018,7 @@ server <- function(input, output, session) {
                                         .f = ~ jh_construct_geoms_after_planning_function(vertebral_level_tibble = pt_adjusted_rotated_spine_df %>% filter(spine_level == .x),
                                                                                           buffer_amount = 3*calibration_list$calibration_modifier))
         
-        # spine_simulation_planning_reactive_list$planned_geom <-map(.x = planned_spine_geoms_list, 
-        #                    .f = ~ geom_sf(data = st_sfc(.x), 
-        #                                   color = "darkblue",
-        #                                   fill = "grey90", 
-        #                                   alpha = 0.8)
-        # )
+        
         spine_simulation_planning_reactive_list$planned_geom <-geom_sf(data = st_sfc(planned_spine_geoms_list), 
                                                                        color = "darkblue",
                                                                        fill = "grey90", 
@@ -2133,6 +2039,7 @@ server <- function(input, output, session) {
                                           hypotenuse_length,
                                           hypotenuse_length))
         
+        spine_simulation_planning_reactive_list$c2_tilt_normal_df <- c2_tilt_normal_df
         
         spine_simulation_planning_reactive_list$normal_c2_tilt_geom <-  geom_polygon(data = c2_tilt_normal_df, aes(x = x, y = y), fill = "green", alpha = 0.2)
         
@@ -2146,13 +2053,23 @@ server <- function(input, output, session) {
         spine_simulation_planning_reactive_list$plotting_lines_list <- spine_build_list$lines_list
         
         spine_simulation_planning_reactive_list$normal_c2_tilt_geom <- NULL
+        
+        spine_simulation_planning_reactive_list$c2_tilt_normal_df <- tibble(x = c(0),
+                                                                            y = c(max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y))
+        )
+
       }
       
       if(input$add_rod){
         spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(planned_spine_coord_df = pt_adjusted_rotated_spine_df,
-                                                                                                      uiv = input$rod_uiv)
+                                                                                                      uiv = input$rod_uiv, number_of_knots = 6)
         
-        spine_simulation_planning_reactive_list$rod_geom <- geom_path(data = spine_simulation_planning_reactive_list$rod_coord_df, aes(x = x, y = y), color = "blue", size = 2)
+        spine_simulation_planning_reactive_list$rod_geom <- geom_path(data = spine_simulation_planning_reactive_list$rod_coord_df,
+                                                                      aes(x = x, y = y), 
+                                                                      color = "blue",
+                                                                      size = 2,
+                                                                      lineend = "round",
+                                                                      linejoin = "round")
         
         spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
           spine_simulation_planning_reactive_list$rod_geom +
@@ -2173,7 +2090,9 @@ server <- function(input, output, session) {
   
   output$planning_parameters_table <- renderTable({
     
-    all_preop_measures_df <- enframe(reactiveValuesToList(alignment_parameters_reactivevalues_list)) %>%
+    alignment_parameters_list <- reactiveValuesToList(alignment_parameters_reactivevalues_list)
+    
+    all_preop_measures_df <- enframe(alignment_parameters_list) %>%
       rename(measure = name) %>%
       mutate(measure = str_replace_all(measure, "pelvic_tilt", "PT")) %>%
       mutate(measure = str_replace_all(measure, "pelvic_incidence", "PI")) %>%
@@ -2201,11 +2120,33 @@ server <- function(input, output, session) {
       mutate(planned_value = preop_value) %>% 
       mutate(preop_value = as.double(preop_value), planned_value = as.double(planned_value))
     
-    pelvic_incidence_df %>%
+    # preop_pelvic_tilt <- alignment_parameters_list$pelvic_tilt
+    
+    
+    preop_planned_measures_df <- pelvic_incidence_df %>%
       union_all(planned_preop_vpas_df) %>%
+      mutate(preop_value = paste0(round(preop_value, 1), "º"), planned_value = paste0(round(planned_value, 1), "º")) %>%
       rename("Measure" = measure)%>%
       rename("Planned" = planned_value)%>%
-      rename("Preop" = preop_value)
+      rename("Preop" = preop_value) 
+    
+    if(nrow(preop_planned_measures_df)>2){
+      goal_l1pa <- target_l1pa_function(pelvic_incidence = alignment_parameters_list$pelvic_incidence)
+      
+      current_l1pa <- planned_preop_vpas_df %>%
+        filter(measure == "L1PA") %>%
+        pull(planned_value)
+      
+      l1pa_goal_range <- as.character(glue("{round(goal_l1pa-2, 1)}º to {round(goal_l1pa+2, 1)}º"))
+      t4pa_goal_range <- as.character(glue("{current_l1pa-4}º to {current_l1pa+1}º"))
+      
+      preop_planned_measures_df %>%
+        mutate("Goal" = c("-", l1pa_goal_range, t4pa_goal_range, "-"))
+    }else{
+      preop_planned_measures_df
+    }
+      
+    
     
   
   })
@@ -2215,7 +2156,17 @@ server <- function(input, output, session) {
   output$preop_spine_simulation_plot <- renderPlot({
     # spine_simulation_planning_plot()
     
+    
     if(length(spine_build_list_reactivevalues$spine_build_list)>0){
+      ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.1)
+      
+      if(max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y) > ylimits[[2]]){
+        # ylimits <- c(0, max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y)*1.1)
+        ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.25)
+      }
+      
+      xlimits <- range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x) + c(-1, 1) * 0.2 * diff(range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x))
+
       ggplot() +
         spine_simulation_planning_reactive_list$normal_c2_tilt_geom +
         spine_simulation_planning_reactive_list$preop_geom +
@@ -2231,8 +2182,8 @@ server <- function(input, output, session) {
         # theme_void() +
         spine_simulation_planning_reactive_list$rod_geom +
         theme_minimal_grid()+
-        ylim(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y) + 85) +
-        xlim(min(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x) - 20, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x) + 50) +
+        ylim(ylimits) +
+        xlim(xlimits) +
         labs(title = "Preop & Planned Alignment") +
         theme(
           # axis.text = element_blank(),
