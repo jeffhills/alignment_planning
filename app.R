@@ -182,7 +182,16 @@ ui <- dashboardPage(
                      box-sizing: border-box;  /* Include padding and border in the element's width */",
                        htmlOutput(outputId = "xray_click_instructions")
                      ),
-                     br()
+                     conditionalPanel(
+                       condition = "input.xray_file_uploaded == true",
+                       fluidRow(
+                         tags$div(
+                           "Zoom with scroll wheel; Pan with right click",
+                           style = "font-size: 10pt; font-style: italic; color: #555; text-align: center;"
+                         )
+                       )
+                     ),
+                     # br()
                    )
                  ),
                  conditionalPanel(
@@ -520,12 +529,7 @@ ui <- dashboardPage(
                  ),
                  conditionalPanel(
                    condition = "input.xray_file_uploaded == true",
-                   fluidRow(
-                     tags$div(
-                       "zoom with scroll wheel; pan with right click",
-                       style = "font-size: 8pt; font-style: italic; color: #555; text-align: center;"
-                     )
-                   ),
+                   br(),
                    fluidRow(
                      column(
                        width = 6,
@@ -605,7 +609,20 @@ ui <- dashboardPage(
                             )
                      )
                    ),
-                   tableOutput(outputId = "planning_parameters_table")
+                   fluidRow(
+                     column(width = 6, 
+                            tableOutput(outputId = "planning_parameters_table")
+                            ),
+                     column(width = 6, 
+                            conditionalPanel(condition = "input.add_rod == true",
+                                             fluidRow(
+                                               column(6, div(style = "display: flex; align-items: right; height: 100%;", strong("Rod Smoothing:"))),
+                                               column(6, numericInput(inputId = "rod_knots",label = NULL, value = 6, min = 2))
+                                             )
+                            )
+                     )
+                   )
+                   
                ),
                box(title = "Coordinate Data:",
                    collapsible = TRUE, collapsed = TRUE,
@@ -2062,7 +2079,7 @@ server <- function(input, output, session) {
       
       if(input$add_rod){
         spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(planned_spine_coord_df = pt_adjusted_rotated_spine_df,
-                                                                                                      uiv = input$rod_uiv, number_of_knots = 6)
+                                                                                                      uiv = input$rod_uiv, number_of_knots = input$rod_knots)
         
         spine_simulation_planning_reactive_list$rod_geom <- geom_path(data = spine_simulation_planning_reactive_list$rod_coord_df,
                                                                       aes(x = x, y = y), 
@@ -2161,11 +2178,19 @@ server <- function(input, output, session) {
       ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.1)
       
       if(max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y) > ylimits[[2]]){
-        # ylimits <- c(0, max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y)*1.1)
         ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.25)
       }
       
       xlimits <- range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x) + c(-1, 1) * 0.2 * diff(range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x))
+      
+      if(input$add_rod){
+        if(max(xlimits) < max(spine_simulation_planning_reactive_list$rod_coord_df$x)){
+          xlimits <- c(xlimits[[1]], max(spine_simulation_planning_reactive_list$rod_coord_df$x))
+        }
+        if(min(xlimits) > min(spine_simulation_planning_reactive_list$rod_coord_df$x)){
+          xlimits <- c(xlimits[[1]], min(spine_simulation_planning_reactive_list$rod_coord_df$x))
+        }
+      }
 
       ggplot() +
         spine_simulation_planning_reactive_list$normal_c2_tilt_geom +
