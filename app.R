@@ -2146,94 +2146,44 @@ server <- function(input, output, session) {
   ### alignment planning table ###
   
   output$planning_parameters_table <- renderTable({
-    
-    # alignment_parameters_list <- reactiveValuesToList(alignment_parameters_reactivevalues_list)
-    # 
-    # all_preop_measures_df <- enframe(alignment_parameters_list) %>%
-    #   rename(measure = name) %>%
-    #   mutate(measure = str_replace_all(measure, "pelvic_tilt", "PT")) %>%
-    #   mutate(measure = str_replace_all(measure, "pelvic_incidence", "PI")) %>%
-    #   mutate(measure = str_replace_all(measure, "sacral_slope", "SS")) %>%
-    #   mutate(measure = str_to_upper(measure)) %>%
-    #   select(measure, preop_value = value)
-    # 
-    # 
-    # # print(paste("Names to all_preop_measures_df:", toString(names(all_preop_measures_df))))
-    # 
-    # planned_measures_df <- enframe(spine_simulation_planning_reactive_list$vpa_values_list, name = "measure") %>%
-    #   unnest() %>%
-    #   mutate(measure = str_to_upper(measure), value = round(value, 1))  %>%
-    #   filter(measure != "T9PA") %>%
-    #   select(measure, planned_value = value) %>%
-    #   unnest(planned_value)
-    # 
-    # 
-    # planned_preop_vpas_df <- all_preop_measures_df %>%
-    #   filter(measure %in% planned_measures_df$measure) %>%
-    #   left_join(planned_measures_df) %>%
-    #   mutate(preop_value = as.double(preop_value), planned_value = as.double(planned_value))
-    # 
-    # pelvic_incidence_df <- all_preop_measures_df %>%
-    #   filter(measure == "PI") %>%
-    #   mutate(planned_value = preop_value) %>% 
-    #   mutate(preop_value = as.double(preop_value), planned_value = as.double(planned_value))
-    # 
-    # # preop_pelvic_tilt <- alignment_parameters_list$pelvic_tilt
-    # 
-    # 
-    # preop_planned_measures_df <- pelvic_incidence_df %>%
-    #   union_all(planned_preop_vpas_df) %>%
-    #   mutate(preop_value = paste0(round(preop_value, 1), "º"), planned_value = paste0(round(planned_value, 1), "º")) %>%
-    #   rename("Measure" = measure)%>%
-    #   rename("Planned" = planned_value)%>%
-    #   rename("Preop" = preop_value) 
-    # 
-    # if(nrow(preop_planned_measures_df)>2){
-    #   goal_l1pa <- target_l1pa_function(pelvic_incidence = alignment_parameters_list$pelvic_incidence)
-    #   
-    #   current_l1pa <- planned_preop_vpas_df %>%
-    #     filter(measure == "L1PA") %>%
-    #     pull(planned_value)
-    #   
-    #   l1pa_goal_range <- as.character(glue("{round(goal_l1pa-2, 1)}º to {round(goal_l1pa+2, 1)}º"))
-    #   t4pa_goal_range <- as.character(glue("{current_l1pa-4}º to {current_l1pa+1}º"))
-    #   
-    #   preop_planned_measures_df %>%
-    #     mutate("Goal" = c("-", l1pa_goal_range, t4pa_goal_range, "-"))
-    # }else{
-    #   preop_planned_measures_df
-    # }
-    
     alignment_parameters_list <- reactiveValuesToList(alignment_parameters_reactivevalues_list)
+    if(length(alignment_parameters_list > 1)){
+      
+      
+      preop_vector <- c(alignment_parameters_list$pelvic_incidence, 
+                        alignment_parameters_list$pelvic_tilt, 
+                        alignment_parameters_list$l1pa, 
+                        alignment_parameters_list$t4pa, 
+                        alignment_parameters_list$c2pa)
+      
+      if(any(spine_segmental_planning_df$df$adjustment != 0)){
+        spine_planning_list <- reactiveValuesToList(spine_simulation_planning_reactive_list)
+        
+        planned_vector <- c(alignment_parameters_list$pelvic_incidence, 
+                            spine_planning_list$predicted_pt, 
+                            spine_planning_list$vpa_values_list$l1pa, 
+                            spine_planning_list$vpa_values_list$t4pa, 
+                            spine_planning_list$vpa_values_list$c2pa)
+      }else{
+        planned_vector <- preop_vector
+      }
+      
+      tibble('Measure' = c("PI",
+                           "PT", 
+                           "L1PA", 
+                           "T4PA", 
+                           "C2PA"), 
+             preop_value = preop_vector,
+             planned_value = planned_vector) %>%
+        mutate(preop_value = round(preop_value, 1), 
+               planned_value = round(planned_value, 1)) %>%
+        mutate(preop_value = paste0(preop_value, "º"),
+               planned_value = paste0(planned_value, "º")) %>%
+        rename("Preop" = preop_value, "Planned" = planned_value)  
+    }
     
-    tibble('Measure' = c("PI",
-                       "PT", 
-                       "L1PA", 
-                       "T4PA", 
-                       "C2PA"), 
-           preop_value = c(alignment_parameters_list$pelvic_incidence, 
-                           alignment_parameters_list$pelvic_tilt, 
-                           alignment_parameters_list$l1pa, 
-                           alignment_parameters_list$t4pa, 
-                           alignment_parameters_list$c2pa),
-           planned_value = c(alignment_parameters_list$pelvic_incidence, 
-                             spine_simulation_planning_reactive_list$predicted_pt, 
-                           spine_simulation_planning_reactive_list$vpa_values_list$l1pa, 
-                           spine_simulation_planning_reactive_list$vpa_values_list$t4pa, 
-                           spine_simulation_planning_reactive_list$vpa_values_list$c2pa)) %>%
-      mutate(preop_value = round(preop_value, 1), 
-             planned_value = round(planned_value, 1)) %>%
-      mutate(preop_value = paste0(preop_value, "º"),
-             planned_value = paste0(planned_value, "º")) %>%
-      rename("Preop" = preop_value, "Planned" = planned_value)
     
-    
-    # planned_measures_df <- enframe(spine_simulation_planning_reactive_list$vpa_values_list, name = "measure") %>%
-    #   unnest() %>%
-    #   mutate(measure = str_to_upper(measure), value = round(value, 1))  %>%
-    #   filter(measure != "T9PA") %>%
-    #   select(measure, planned_value = value) %>%
-    #   unnest(planned_value)
+
     
   })
   
