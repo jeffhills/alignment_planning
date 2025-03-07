@@ -179,64 +179,201 @@ create_spine_rigid_level_input_function <- function(segment_input_label){
 }
 
 
-generate_spine_level_controls <- function(spine_level, 
-                                          spine_level_font_size = 11, 
-                                          return_as_full_table = TRUE) {
-  
-  label_style <- glue("font-size:{paste(spine_level_font_size)}px; color:darkblue; font-weight:bold; text-align:center; margin-top:0; margin-bottom:0")
-  
+# generate_spine_level_controls <- function(spine_level, 
+#                                           spine_level_font_size = 11, 
+#                                           return_as_full_table = TRUE) {
+#   
+#   label_style <- glue("font-size:{paste(spine_level_font_size)}px; color:darkblue; font-weight:bold; text-align:center; margin-top:0; margin-bottom:0")
+#   
+#   spine_level_id <- str_to_lower(str_replace_all(spine_level, "-", "_"))
+#   
+#   label_percent_width <- 30
+#   button_percent_width <- (100-label_percent_width)/4
+#   
+#   row <- tags$tr(width = "100%",
+#                  tags$td(width = paste0(button_percent_width, "%"),
+#                          actionBttn(
+#                            inputId = paste0(spine_level_id, "_lordosis_down_5"),
+#                            label = "-5",
+#                            style = "material-circle",
+#                            size = "xs"
+#                          )
+#                  ),
+#                  tags$td(width = paste0(button_percent_width, "%"),
+#                          actionBttn(
+#                            inputId = paste0(spine_level_id, "_lordosis_down_1"),
+#                            label = "-1",
+#                            style = "material-circle",
+#                            size = "xs"
+#                          )
+#                  ),
+#                  tags$td(width = paste0(label_percent_width, "%"), 
+#                          tags$div(style = label_style, paste(spine_level))),
+#                  tags$td(width = paste0(button_percent_width, "%"),
+#                          actionBttn(
+#                            inputId = paste0(spine_level_id, "_lordosis_up_1"),
+#                            label = "+1",
+#                            style = "material-circle",
+#                            size = "xs"
+#                          )
+#                  ),
+#                  tags$td(width = paste0(button_percent_width, "%"),
+#                          actionBttn(
+#                            inputId = paste0(spine_level_id, "_lordosis_up_5"),
+#                            label = "+5",
+#                            style = "material-circle",
+#                            size = "xs"
+#                          )
+#                  ),
+#   )
+#   
+#   if(return_as_full_table == TRUE){
+#     return(tags$table(width = "100%",
+#                       row))
+#   }else{
+#     return(row)
+#   }
+#   
+# }
+
+# generate_spine_level_controls <- function(spine_level) {
+#   spine_level_id <- str_to_lower(str_replace_all(spine_level, "-", "_"))
+#   
+#   tags$tr( 
+#     tags$div(
+#       class = "btn-group",
+#       role  = "group",
+#       `aria-label` = "Basic example",
+#       # -5 button
+#       tags$button(
+#         type  = "button",
+#         class = "btn btn-secondary",
+#         id    = paste0(spine_level_id, "_lordosis_down_5"),
+#         "-5º"
+#       ),
+#       
+#       # -1 button
+#       tags$button(
+#         type  = "button",
+#         class = "btn btn-secondary",
+#         id    = paste0(spine_level_id, "_lordosis_down_1"),
+#         "-1º"
+#       )
+#     ),
+#     
+#     # Spine level label
+#     tags$span(
+#       spine_level,
+#       style = "font-weight: bold; padding: 0 10px; color: darkblue;"
+#     ),
+#     tags$div(
+#       class = "btn-group",
+#       role  = "group",
+#       `aria-label` = "Basic example",
+#       # -5 button
+#       # +1 button
+#       tags$button(
+#         type  = "button",
+#         class = "btn btn-secondary",
+#         id    = paste0(spine_level_id, "_lordosis_up_1"),
+#         "+1º"
+#       ),
+#       
+#       # +5 button
+#       tags$button(
+#         type  = "button",
+#         class = "btn btn-secondary",
+#         id    = paste0(spine_level_id, "_lordosis_up_5"),
+#         "+5º"
+#       )
+#     ))
+# }
+
+generate_spine_level_controls <- function(spine_level) {
   spine_level_id <- str_to_lower(str_replace_all(spine_level, "-", "_"))
   
-  label_percent_width <- 30
-  button_percent_width <- (100-label_percent_width)/4
+  left_button_group_style <- "font-weight: bold;
+        padding: 0px; 
+        float: right;
+        border-radius: 10px;
+        border: groove;
+        margin: 1px;
+        color: darkblue"  
   
-  row <- tags$tr(width = "100%",
-                 tags$td(width = paste0(button_percent_width, "%"),
-                         actionBttn(
-                           inputId = paste0(spine_level_id, "_lordosis_down_5"),
-                           label = "-5",
-                           style = "material-circle",
-                           size = "xs"
-                         )
-                 ),
-                 tags$td(width = paste0(button_percent_width, "%"),
-                         actionBttn(
-                           inputId = paste0(spine_level_id, "_lordosis_down_1"),
-                           label = "-1",
-                           style = "material-circle",
-                           size = "xs"
-                         )
-                 ),
-                 tags$td(width = paste0(label_percent_width, "%"), 
-                         tags$div(style = label_style, paste(spine_level))),
-                 tags$td(width = paste0(button_percent_width, "%"),
-                         actionBttn(
-                           inputId = paste0(spine_level_id, "_lordosis_up_1"),
-                           label = "+1",
-                           style = "material-circle",
-                           size = "xs"
-                         )
-                 ),
-                 tags$td(width = paste0(button_percent_width, "%"),
-                         actionBttn(
-                           inputId = paste0(spine_level_id, "_lordosis_up_5"),
-                           label = "+5",
-                           style = "material-circle",
-                           size = "xs"
-                         )
-                 ),
+  right_button_group_style <- "font-weight: bold;
+        padding: 0px; 
+        float: left;
+        border-radius: 10px;
+        border: groove;
+        margin: 1px;
+        color: darkblue"  
+  
+  left_button_style <- "border-right: 2px solid darkgrey;
+  padding: 0px 10px;
+  line-height: 1;
+  font-size: 14px"  
+  
+  right_button_style <- "border-left: 2px solid darkgrey;
+  padding: 0px 10px;
+  line-height: 1;
+  font-size: 14px" 
+  
+  spine_level_style <- "font-weight: bold;
+        font-size: 12px;
+        padding: 1px;
+        line-height: 1;
+        text-align: -webkit-center;
+        color: darkblue"
+  
+  tags$tr(
+    tags$td(
+            class = "btn-group",
+            role  = "group",
+            `aria-label` = "Basic example",
+            style = left_button_group_style,
+            tags$button(
+              type  = "button",
+              class = "btn btn-secondary",
+              style = left_button_style,
+              id    = paste0(spine_level_id, "_lordosis_down_5"),
+              "-5º"
+            ),
+            tags$button(
+              type  = "button",
+              class = "btn btn-secondary",
+              style = right_button_style,
+              id    = paste0(spine_level_id, "_lordosis_down_1"),
+              "-1º"
+            )
+    ),
+      tags$td(
+        style = spine_level_style,
+        spine_level
+      ),
+    tags$td(
+      class = "btn-group",
+      role  = "group",
+      `aria-label` = "Basic example",
+      style = right_button_group_style,
+      tags$button(
+        type  = "button",
+        class = "btn btn-secondary",
+        style = left_button_style,
+        id    = paste0(spine_level_id, "_lordosis_up_1"),
+        "+1º"
+      ),
+      tags$button(
+        type  = "button",
+        class = "btn btn-secondary",
+        style = right_button_style,
+        id    = paste0(spine_level_id, "_lordosis_up_5"),
+        "+5º"
+      )
+    ),
   )
   
-  if(return_as_full_table == TRUE){
-    return(tags$table(width = "100%",
-                      row))
-  }else{
-    return(row)
-  }
-  
+
 }
-
-
 
 update_spine_segmental_planning_df_function <- function(spine_segmental_planning_df, spine_interspace_input, change) {
   spine_segmental_planning_df$df <- spine_segmental_planning_df$df %>%

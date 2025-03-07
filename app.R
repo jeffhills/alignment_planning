@@ -579,7 +579,7 @@ ui <- dashboardPage(
       ########## MAIN PAGE COLUMN 2 STARTS HERE: ##############
       ########## MAIN PAGE COLUMN 2 STARTS HERE: ##############
       ########## MAIN PAGE COLUMN 2 STARTS HERE: ##############
-      column(width = 5,
+      column(width = 8,
              conditionalPanel(
                condition = "input.all_points_recorded == true",
                box(width = 12,
@@ -614,40 +614,88 @@ ui <- dashboardPage(
                                       h5(p(em("Open in Adobe Acrobat & Print as 'Poster' at 100% Scale.")))
                                     )
                    ),
-                   plotOutput(outputId = "preop_spine_simulation_plot",
-                              height = "750px"), 
                    fluidRow(
-                     column(width = 6, 
-                            div(
-                              style = "text-align: center;",
-                              switchInput(inputId = "add_rod", label = "Add Rod?", value = FALSE, onLabel = "Yes", offLabel = "No")
-                            )
-                     ),
-                     column(width = 6, 
-                            conditionalPanel(condition = "input.add_rod == true",
-                                             radioGroupButtons(
-                                               inputId = "rod_uiv",
-                                               label = "UIV:",
-                                               choices = c("C2", "T2", "T4", "T9", "T10", "T11", "T12", "L1", "L2"),
-                                               selected = "T4"
-                                             )
-                            )
-                     )
-                   ),
-                   fluidRow(
-                     column(width = 6, 
+                     column(width = 4, 
                             tableOutput(outputId = "planning_parameters_table")
                             ),
-                     column(width = 6, 
-                            conditionalPanel(condition = "input.add_rod == true",
-                                             fluidRow(
-                                               column(6, div(style = "display: flex; align-items: right; height: 100%;", strong("Rod Detail:"))),
-                                               column(6, numericInput(inputId = "rod_knots",label = NULL, value = 6, min = 2))
-                                             )
+                     column(width = 4, 
+                            plotOutput(outputId = "preop_spine_simulation_plot",
+                                       height = "750px"), 
+                            fluidRow(
+                              column(width = 6, 
+                                     div(
+                                       style = "text-align: center;",
+                                       switchInput(inputId = "add_rod", label = "Add Rod?", value = FALSE, onLabel = "Yes", offLabel = "No")
+                                     )
+                              ),
+                              column(width = 6, 
+                                     conditionalPanel(condition = "input.add_rod == true",
+                                                      radioGroupButtons(
+                                                        inputId = "rod_uiv",
+                                                        label = "UIV:",
+                                                        choices = c("C2", "T2", "T4", "T9", "T10", "T11", "T12", "L1", "L2"),
+                                                        selected = "T4"
+                                                      ),
+                                                      fluidRow(
+                                                        column(6, div(style = "display: flex; align-items: right; height: 100%;", strong("Rod Contouring:"))),
+                                                        column(6, numericInput(inputId = "rod_knots",label = NULL, value = 6, min = 2))
+                                                      )
+                                     )
+                              )
                             )
-                     )
+                     ),
+                     column(width = 4, 
+                            tags$script(HTML("
+             $(document).ready(function() {
+             $('.btn-group button').on('click', function() {
+             var btn_id = $(this).attr('id');
+             Shiny.setInputValue(btn_id, Date.now());
+             });
+             });
+                              ")),
+                            conditionalPanel(
+                              condition = "input.all_points_recorded == true",
+                              box(width = 12, title = "Surgical Correction:",
+                                  box(width = 12,
+                                      title = "Cervical", 
+                                      collapsible = TRUE, 
+                                      collapsed = TRUE,
+                                      tags$table(width = "100%",
+                                                 map(.x = jh_spine_levels_factors_df$interspace[1:7], 
+                                                     .f = ~ generate_spine_level_controls(spine_level = .x))
+                                      )
+                                  ),
+                                  box(width = 12,title = "Thoracic", 
+                                      collapsible = TRUE, 
+                                      collapsed = FALSE,
+                                      tags$table(width = "100%",
+                                                 map(.x = jh_spine_levels_factors_df$interspace[8:19], 
+                                                     .f = ~ generate_spine_level_controls(spine_level = .x))
+                                      )
+                                  ),
+                                  box(width = 12,title = "Lumbar", 
+                                      collapsible = TRUE, 
+                                      collapsed = FALSE,
+                                      tags$table(width = "100%",
+                                                 map(.x = jh_spine_levels_factors_df$interspace[20:24], 
+                                                     .f = ~ generate_spine_level_controls(spine_level = .x))
+                                      )
+                                  ),
+                                  actionBttn(
+                                    size = "md",
+                                    inputId = "segmental_planning_reset",
+                                    block = TRUE,
+                                    label = "Reset",
+                                    style = "unite",
+                                    color = "danger",
+                                    icon = icon("arrow-rotate-left")
+                                  ),
+                                  tableOutput(outputId = "spine_segmental_planning_df")
+                                  
+                              )
+                            )
+                            )
                    )
-                   
                ),
                box(title = "Coordinate Data:",
                    collapsible = TRUE, collapsed = TRUE,
@@ -674,47 +722,7 @@ ui <- dashboardPage(
       ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
       
       column(width = 3,
-             conditionalPanel(
-               condition = "input.all_points_recorded == true",
-               box(width = 12, title = "Surgical Correction:",
-               box(width = 12,
-                   title = "Cervical", 
-                   collapsible = TRUE, 
-                   collapsed = TRUE,
-                   tags$table(width = "100%",
-                              map(.x = jh_spine_levels_factors_df$interspace[1:7], 
-                                  .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
-                   )
-               ),
-               box(width = 12,title = "Thoracic", 
-                   collapsible = TRUE, 
-                   collapsed = FALSE,
-                   tags$table(width = "100%",
-                              map(.x = jh_spine_levels_factors_df$interspace[8:19], 
-                                  .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
-                   )
-               ),
-               box(width = 12,title = "Lumbar", 
-                   collapsible = TRUE, 
-                   collapsed = FALSE,
-                   tags$table(width = "100%",
-                              map(.x = jh_spine_levels_factors_df$interspace[20:24], 
-                                  .f = ~generate_spine_level_controls(spine_level = .x, return_as_full_table = FALSE))
-                   )
-               ),
-               actionBttn(
-                 size = "md",
-                 inputId = "segmental_planning_reset",
-                 block = TRUE,
-                 label = "Reset",
-                 style = "unite",
-                 color = "danger",
-                 icon = icon("arrow-rotate-left")
-               ),
-               tableOutput(outputId = "spine_segmental_planning_df")
-             
-               )
-      )
+
       )
       
       # column(width = 8,
@@ -1967,7 +1975,8 @@ server <- function(input, output, session) {
   
   # Optional: Display the updated table in UI for debugging
   output$spine_segmental_planning_df <- renderTable({
-    spine_segmental_planning_df$df
+    spine_segmental_planning_df$df %>%
+      filter(adjustment != 0)
   })
   
   observeEvent(input$segmental_planning_reset, ignoreInit = TRUE, {
@@ -1979,6 +1988,7 @@ server <- function(input, output, session) {
   
   spine_simulation_planning_reactive_list <- reactiveValues(preop_geom = NULL, 
                                                             planned_geom = NULL, 
+                                                            predicted_pt = NULL,
                                                             plotting_lines_list = list(l1pa = NULL, t4pa = NULL, c2pa = NULL),
                                                             rod_plot = NULL,
                                                             rod_coord_df = tibble(), 
@@ -2035,6 +2045,8 @@ server <- function(input, output, session) {
                                                    preop_pt = preop_pelvic_tilt,
                                                    preop_c2_tilt = preop_c2_tilt)
         
+        spine_simulation_planning_reactive_list$predicted_pt <- predicted_pt
+        
         pt_change <- preop_pelvic_tilt - predicted_pt
         
         pt_adjusted_rotated_spine_df <- rotate_spine_function(spine_df = rotated_spine_coord_df, angle_degrees = pt_change)
@@ -2085,6 +2097,31 @@ server <- function(input, output, session) {
         
         spine_simulation_planning_reactive_list$normal_c2_tilt_geom <-  geom_polygon(data = c2_tilt_normal_df, aes(x = x, y = y), fill = "green", alpha = 0.2)
         
+        if(input$add_rod){
+          spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(planned_spine_coord_df = pt_adjusted_rotated_spine_df,
+                                                                                                        uiv = input$rod_uiv, number_of_knots = input$rod_knots)
+          
+          spine_simulation_planning_reactive_list$rod_geom <- geom_path(data = spine_simulation_planning_reactive_list$rod_coord_df,
+                                                                        aes(x = x, y = y), 
+                                                                        color = "blue",
+                                                                        size = 2,
+                                                                        lineend = "round",
+                                                                        linejoin = "round")
+          
+          spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
+            spine_simulation_planning_reactive_list$rod_geom +
+            theme_minimal_grid()
+          
+        }else{
+          spine_simulation_planning_reactive_list$rod_geom <- NULL
+          
+          spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
+            spine_simulation_planning_reactive_list$rod_geom +
+            theme_minimal_grid()
+          
+        }
+        
+        
       }else{
         spine_simulation_planning_reactive_list$preop_geom <- geom_sf(data = st_sfc(spine_build_list$vert_geom_list), 
                                                                       color = "black",
@@ -2102,29 +2139,7 @@ server <- function(input, output, session) {
 
       }
       
-      if(input$add_rod){
-        spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(planned_spine_coord_df = pt_adjusted_rotated_spine_df,
-                                                                                                      uiv = input$rod_uiv, number_of_knots = input$rod_knots)
-        
-        spine_simulation_planning_reactive_list$rod_geom <- geom_path(data = spine_simulation_planning_reactive_list$rod_coord_df,
-                                                                      aes(x = x, y = y), 
-                                                                      color = "blue",
-                                                                      size = 2,
-                                                                      lineend = "round",
-                                                                      linejoin = "round")
-        
-        spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
-          spine_simulation_planning_reactive_list$rod_geom +
-          theme_minimal_grid()
-        
-      }else{
-        spine_simulation_planning_reactive_list$rod_geom <- NULL
-        
-        spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
-          spine_simulation_planning_reactive_list$rod_geom +
-          theme_minimal_grid()
-        
-      }
+
     }
   })
   
@@ -2132,65 +2147,94 @@ server <- function(input, output, session) {
   
   output$planning_parameters_table <- renderTable({
     
+    # alignment_parameters_list <- reactiveValuesToList(alignment_parameters_reactivevalues_list)
+    # 
+    # all_preop_measures_df <- enframe(alignment_parameters_list) %>%
+    #   rename(measure = name) %>%
+    #   mutate(measure = str_replace_all(measure, "pelvic_tilt", "PT")) %>%
+    #   mutate(measure = str_replace_all(measure, "pelvic_incidence", "PI")) %>%
+    #   mutate(measure = str_replace_all(measure, "sacral_slope", "SS")) %>%
+    #   mutate(measure = str_to_upper(measure)) %>%
+    #   select(measure, preop_value = value)
+    # 
+    # 
+    # # print(paste("Names to all_preop_measures_df:", toString(names(all_preop_measures_df))))
+    # 
+    # planned_measures_df <- enframe(spine_simulation_planning_reactive_list$vpa_values_list, name = "measure") %>%
+    #   unnest() %>%
+    #   mutate(measure = str_to_upper(measure), value = round(value, 1))  %>%
+    #   filter(measure != "T9PA") %>%
+    #   select(measure, planned_value = value) %>%
+    #   unnest(planned_value)
+    # 
+    # 
+    # planned_preop_vpas_df <- all_preop_measures_df %>%
+    #   filter(measure %in% planned_measures_df$measure) %>%
+    #   left_join(planned_measures_df) %>%
+    #   mutate(preop_value = as.double(preop_value), planned_value = as.double(planned_value))
+    # 
+    # pelvic_incidence_df <- all_preop_measures_df %>%
+    #   filter(measure == "PI") %>%
+    #   mutate(planned_value = preop_value) %>% 
+    #   mutate(preop_value = as.double(preop_value), planned_value = as.double(planned_value))
+    # 
+    # # preop_pelvic_tilt <- alignment_parameters_list$pelvic_tilt
+    # 
+    # 
+    # preop_planned_measures_df <- pelvic_incidence_df %>%
+    #   union_all(planned_preop_vpas_df) %>%
+    #   mutate(preop_value = paste0(round(preop_value, 1), "º"), planned_value = paste0(round(planned_value, 1), "º")) %>%
+    #   rename("Measure" = measure)%>%
+    #   rename("Planned" = planned_value)%>%
+    #   rename("Preop" = preop_value) 
+    # 
+    # if(nrow(preop_planned_measures_df)>2){
+    #   goal_l1pa <- target_l1pa_function(pelvic_incidence = alignment_parameters_list$pelvic_incidence)
+    #   
+    #   current_l1pa <- planned_preop_vpas_df %>%
+    #     filter(measure == "L1PA") %>%
+    #     pull(planned_value)
+    #   
+    #   l1pa_goal_range <- as.character(glue("{round(goal_l1pa-2, 1)}º to {round(goal_l1pa+2, 1)}º"))
+    #   t4pa_goal_range <- as.character(glue("{current_l1pa-4}º to {current_l1pa+1}º"))
+    #   
+    #   preop_planned_measures_df %>%
+    #     mutate("Goal" = c("-", l1pa_goal_range, t4pa_goal_range, "-"))
+    # }else{
+    #   preop_planned_measures_df
+    # }
+    
     alignment_parameters_list <- reactiveValuesToList(alignment_parameters_reactivevalues_list)
     
-    all_preop_measures_df <- enframe(alignment_parameters_list) %>%
-      rename(measure = name) %>%
-      mutate(measure = str_replace_all(measure, "pelvic_tilt", "PT")) %>%
-      mutate(measure = str_replace_all(measure, "pelvic_incidence", "PI")) %>%
-      mutate(measure = str_replace_all(measure, "sacral_slope", "SS")) %>%
-      mutate(measure = str_to_upper(measure)) %>%
-      select(measure, preop_value = value)
-    
-    # print(paste("Names to all_preop_measures_df:", toString(names(all_preop_measures_df))))
-    
-    planned_measures_df <- enframe(spine_simulation_planning_reactive_list$vpa_values_list, name = "measure") %>%
-      unnest() %>%
-      mutate(measure = str_to_upper(measure), value = round(value, 1))  %>%
-      filter(measure != "T9PA") %>%
-      select(measure, planned_value = value) %>%
-      unnest(planned_value)
-    
-    
-    planned_preop_vpas_df <- all_preop_measures_df %>%
-      filter(measure %in% planned_measures_df$measure) %>%
-      left_join(planned_measures_df) %>%
-      mutate(preop_value = as.double(preop_value), planned_value = as.double(planned_value))
-    
-    pelvic_incidence_df <- all_preop_measures_df %>%
-      filter(measure == "PI") %>%
-      mutate(planned_value = preop_value) %>% 
-      mutate(preop_value = as.double(preop_value), planned_value = as.double(planned_value))
-    
-    # preop_pelvic_tilt <- alignment_parameters_list$pelvic_tilt
+    tibble('Measure' = c("PI",
+                       "PT", 
+                       "L1PA", 
+                       "T4PA", 
+                       "C2PA"), 
+           preop_value = c(alignment_parameters_list$pelvic_incidence, 
+                           alignment_parameters_list$pelvic_tilt, 
+                           alignment_parameters_list$l1pa, 
+                           alignment_parameters_list$t4pa, 
+                           alignment_parameters_list$c2pa),
+           planned_value = c(alignment_parameters_list$pelvic_incidence, 
+                             spine_simulation_planning_reactive_list$predicted_pt, 
+                           spine_simulation_planning_reactive_list$vpa_values_list$l1pa, 
+                           spine_simulation_planning_reactive_list$vpa_values_list$t4pa, 
+                           spine_simulation_planning_reactive_list$vpa_values_list$c2pa)) %>%
+      mutate(preop_value = round(preop_value, 1), 
+             planned_value = round(planned_value, 1)) %>%
+      mutate(preop_value = paste0(preop_value, "º"),
+             planned_value = paste0(planned_value, "º")) %>%
+      rename("Preop" = preop_value, "Planned" = planned_value)
     
     
-    preop_planned_measures_df <- pelvic_incidence_df %>%
-      union_all(planned_preop_vpas_df) %>%
-      mutate(preop_value = paste0(round(preop_value, 1), "º"), planned_value = paste0(round(planned_value, 1), "º")) %>%
-      rename("Measure" = measure)%>%
-      rename("Planned" = planned_value)%>%
-      rename("Preop" = preop_value) 
+    # planned_measures_df <- enframe(spine_simulation_planning_reactive_list$vpa_values_list, name = "measure") %>%
+    #   unnest() %>%
+    #   mutate(measure = str_to_upper(measure), value = round(value, 1))  %>%
+    #   filter(measure != "T9PA") %>%
+    #   select(measure, planned_value = value) %>%
+    #   unnest(planned_value)
     
-    if(nrow(preop_planned_measures_df)>2){
-      goal_l1pa <- target_l1pa_function(pelvic_incidence = alignment_parameters_list$pelvic_incidence)
-      
-      current_l1pa <- planned_preop_vpas_df %>%
-        filter(measure == "L1PA") %>%
-        pull(planned_value)
-      
-      l1pa_goal_range <- as.character(glue("{round(goal_l1pa-2, 1)}º to {round(goal_l1pa+2, 1)}º"))
-      t4pa_goal_range <- as.character(glue("{current_l1pa-4}º to {current_l1pa+1}º"))
-      
-      preop_planned_measures_df %>%
-        mutate("Goal" = c("-", l1pa_goal_range, t4pa_goal_range, "-"))
-    }else{
-      preop_planned_measures_df
-    }
-      
-    
-    
-  
   })
   
   

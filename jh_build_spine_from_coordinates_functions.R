@@ -28,31 +28,6 @@
 # }
 
 
-# Function to create vertebra as an sf polygon
-jh_create_vertebra_from_coordinates_function <- function(centroid_x = 0, centroid_y = 0, width = 5, height = 4, spine_orientation = "right") {
-  half_height <- height / 2
-  half_width <- width / 2
-  
-  if(spine_orientation == "right"){
-    # Define the four corners of the vertebra before rotation
-    sp <- c(centroid_x - half_width, centroid_y + half_height)
-    sa <- c(centroid_x + half_width, centroid_y + half_height)
-    ia <- c(centroid_x + half_width, centroid_y - half_height)
-    ip <- c(centroid_x - half_width, centroid_y - half_height)  
-  }else{
-    # Define the four corners of the vertebra before rotation
-    sa <- c(centroid_x - half_width, centroid_y + half_height)
-    sp <- c(centroid_x + half_width, centroid_y + half_height)
-    ip <- c(centroid_x + half_width, centroid_y - half_height)
-    ia <- c(centroid_x - half_width, centroid_y - half_height)
-  }
-  
-  
-  vert_body <- rbind(sp, sa, ia, ip, sp) ## binds the corners to make a square
-  
-  return(st_polygon(list(vert_body)))
-}
-
 jh_find_sacrum_inf_point_function <- function(s1_posterior_sup = c(0,0), 
                                               s1_anterior_sup = c(1, 1), 
                                               spine_facing = "right") {
@@ -382,6 +357,8 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
   
   return_list$buffer_amount <- buffer_amount
   
+  return_list$vert_angles_df <- vert_angles_df
+  
   ### this creates the rotated square vertebrae without endplates aligned. 
   vert_coord_for_sup_endplates_df <- vertebral_heights_df %>%
     filter(str_detect(spine_point, "centroid")) %>%
@@ -435,7 +412,7 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
   
   ### Align the inferior vertebral corners to the superior vertebral corners: 
   
-  aligned_vert_geometry_df <- superior_endplate_coord_df  %>%
+  aligned_vert_geometry_df_pre <- superior_endplate_coord_df  %>%
     mutate(caudal_level = lag(spine_level)) %>%
     mutate(inferior_sp_x = lag(sp_x),
            inferior_sp_y = lag(sp_y),
@@ -476,6 +453,37 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
     mutate(x_or_y = if_else(str_detect(vert_point, "_x"), "x", "y")) %>%
     mutate(vert_point = str_remove_all(vert_point, "_x|_y")) %>%
     pivot_wider(names_from = x_or_y, values_from = value) %>%
+    mutate(spine_level = str_remove_all(spine_level, "_superior_endplate")) 
+  
+  coord_vert_list_pre <- map(.x = unique(aligned_vert_geometry_df_pre$spine_level), 
+                             .f = ~ aligned_vert_geometry_df_pre %>% 
+                               filter(spine_level == .x) %>%
+                               split(.$vert_point) %>%
+                               map(~ c(.x$x, .x$y)))
+  
+  names(coord_vert_list_pre) <- unique(aligned_vert_geometry_df_pre$spine_level)
+  
+  return_list$coord_vert_list_pre <- coord_vert_list_pre
+  
+  adjusted_vert_coord_list <- map(.x = coord_vert_list_pre, .f = ~ jh_calculate_points_for_square_vertebra_function(vert_coord_list = .x))
+  
+  adjusted_aligned_coord_df <- enframe(map(.x = adjusted_vert_coord_list, .f = ~ enframe(.x) %>%
+                                             unnest_wider(col = value, names_sep = "") %>%
+                                             select(vert_point = name, x = value1, y = value2))) %>%
+    select(spine_level = name, vert_coord_df = value)%>%
+    unnest() %>%
+    ungroup()
+  
+  return_list$adjusted_aligned_coord_df <- adjusted_aligned_coord_df
+  
+  return_list$aligned_vert_geometry_df_pre <- aligned_vert_geometry_df_pre
+  
+  return_list$aligned_vert_geometry_df_pre2 <- aligned_vert_geometry_df_pre  %>%
+    select(-x, -y) %>%
+    left_join(adjusted_aligned_coord_df)
+  
+  aligned_vert_geometry_df <-  aligned_vert_geometry_df_pre %>%
+  # aligned_vert_geometry_df <-  return_list$aligned_vert_geometry_df_pre2 
     group_by(spine_level) %>%
     nest() %>%
     ungroup() %>%
@@ -485,7 +493,6 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
     rowwise() %>%
     mutate(geometry = st_sfc(geometry)) %>%
     ungroup()%>%
-    mutate(spine_level = str_remove_all(spine_level, "_superior_endplate")) %>%
     filter(spine_level != "c1") %>%
     add_row(spine_level = "c1", vert_coord_df = list(c1_build_list$vert_coord_df), geometry = st_sfc(c1_build_list$c1_geom))%>%
     mutate(centroid = map(.x = geometry, .f = ~ clean_names(as_tibble(st_coordinates(st_centroid(.x)))) %>% mutate(vert_point = "centroid") %>% select(vert_point, x, y))) %>%
@@ -493,11 +500,17 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
     select(-centroid)
   
   
-  # aligned_vert_geometry_df
   
-  # return_list$superior_endplate_coord_df <- superior_endplate_coord_df
+  # current_vert_coord_list <- aligned_vert_geometry_df %>%
+  #   select(spine_level, vert_coord_df) %>%
+  #   mutate(coord_list = map(.x = vert_coord_df, .f = ~ .x%>%
+  #                             split(.$vert_point) %>%
+  #                             map(~ c(.x$x, .x$y)))) %>%
+  #   pull(coord_list)
   
-  # return_list$aligned_vert_geometry_df <- aligned_vert_geometry_df
+  # adjusted_vert_coord_list <- jh_calculate_points_for_square_vertebra_function(vert_coord_list = current_vert_coord_list)
+  
+  return_list$aligned_vert_geometry_df <- aligned_vert_geometry_df
   
   ### we now have the aligned vertebral bodies. 
   
@@ -511,7 +524,7 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
   
   vert_coord_list <- map(.x = vert_coord_list, .f = ~ jh_reformat_vert_tibble(.x))
   
-  
+
   return_list$vert_geoms_square_list <- vert_geoms_square_list
   return_list$vert_coord_list <- vert_coord_list
   
@@ -615,6 +628,7 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
   s1_list$ip <- sac_inf_1
   s1_list$center <- s1_mid
   
+  
   return_list$vert_coord_list <- prepend(vert_coord_list, list('sacrum' = s1_list))
   
   return_list$vert_geoms_square_list <- prepend(return_list$vert_geoms_square_list, list('sacrum' = sacrum_sf))
@@ -629,6 +643,8 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
                                      .f = ~ jh_get_inferior_superior_disc_rotation_coordinates_function(full_vert_coord_list = return_list$vert_coord_list, index = .x))
   
   names(return_list$vert_coord_list) <- names(return_list$vert_geom_list)
+  
+  
   
   return_list$spine_coord_df <- jh_extract_coord_from_vert_coord_list_function(vert_coord_level_list = return_list$vert_coord_list)
   
@@ -700,20 +716,20 @@ jh_build_spine_from_coordinates_function <- function(femoral_head_center = c(0,0
   
   return_list$lines_list <- lines_list
   
+  new_coord_list <- map(.x = return_list$vert_coord_list, .f = ~ jh_calculate_points_for_square_vertebra_function(vert_coord_list = .x))
   
-  return(  list(vert_coord_list = return_list$vert_coord_list,
-                spine_coord_df = return_list$spine_coord_df,
-                vert_geoms_square_list = return_list$vert_geoms_square_list,
-                # united_c2 = return_list$united_c2,
-                vert_geom_list = return_list$vert_geom_list,
-                fem_head_sf = return_list$fem_head_sf,
-                fem_head_center = return_list$fem_head_center,
-                segment_angles_list = return_list$segment_angles_list,
-                vpa_df = return_list$vpa_df,
-                lines_list = return_list$lines_list, 
-                buffer_amount = return_list$buffer_amount,
-                vert_angles_df = vert_angles_df
-  ))
+  return_list$adjusted_spine_coord_df <- enframe(new_coord_list) %>%
+    rename(spine_level = name) %>%
+    filter(spine_level != "sacrum") %>%
+    unnest_wider(col = value) %>%
+    pivot_longer(cols = c(sp, sa, ia, ip)) %>%
+    mutate(x = map(.x = value, .f = ~ .x[[1]]), 
+           y = map(.x = value, .f = ~.x[[2]])) %>%
+    select(spine_level, vert_point = name, x, y) %>%
+    unnest()
+  
+  
+  return(return_list)
   
 }
 
