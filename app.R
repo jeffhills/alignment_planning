@@ -46,8 +46,7 @@ source("jh_spine_coordinate_geometry_functions.R", local = TRUE)
 # source("xray_segment_angles_model_functions.R", local = TRUE)
 source("jh_build_spine_from_coordinates_functions.R", local = TRUE)
 
-
-
+source("jh_constructing_spine_from_coordinates_new.R", local = TRUE)
 
 
 
@@ -601,7 +600,7 @@ ui <- dashboardPage(
                                                      font-weight: bold;
                                                      margin-left: 10px;
                                                      margin-right: 10px;"
-                                                     ),
+                                      ),
                                       tags$script(HTML("
                                       $(document).ready(function(){
                                       $('#download_rod_template').on('click', function() {
@@ -615,20 +614,23 @@ ui <- dashboardPage(
                                     )
                    ),
                    fluidRow(
-                     column(width = 4, 
-                            tableOutput(outputId = "planning_parameters_table")
-                            ),
-                     column(width = 4, 
-                            plotOutput(outputId = "preop_spine_simulation_plot",
-                                       height = "750px"), 
+                     # column(width = 3, 
+                     #        gt_output(outputId = "planning_parameters_table")
+                     #        # tableOutput(outputId = "planning_parameters_table")
+                     # ),
+                     column(width = 7, 
+                            fluidRow(plotOutput(outputId = "preop_spine_simulation_plot",
+                                       height = "750px")
+                                     ), 
                             fluidRow(
+                              column(width = 6, 
+                                     gt_output(outputId = "planning_parameters_table") 
+                              ),
                               column(width = 6, 
                                      div(
                                        style = "text-align: center;",
                                        switchInput(inputId = "add_rod", label = "Add Rod?", value = FALSE, onLabel = "Yes", offLabel = "No")
-                                     )
-                              ),
-                              column(width = 6, 
+                                     ),
                                      conditionalPanel(condition = "input.add_rod == true",
                                                       radioGroupButtons(
                                                         inputId = "rod_uiv",
@@ -644,7 +646,7 @@ ui <- dashboardPage(
                               )
                             )
                      ),
-                     column(width = 4, 
+                     column(width = 5, 
                             tags$script(HTML("
              $(document).ready(function() {
              $('.btn-group button').on('click', function() {
@@ -694,7 +696,7 @@ ui <- dashboardPage(
                                   
                               )
                             )
-                            )
+                     )
                    )
                ),
                box(title = "Coordinate Data:",
@@ -1641,11 +1643,19 @@ server <- function(input, output, session) {
   #     }
   # })
   
-  spine_build_list_reactivevalues <- reactiveValues(spine_build_list = list())
+  spine_build_list_reactivevalues <- reactiveValues(spine_build_list = list(vert_coord_df = tibble(),
+                                                                            vert_coord_list = list(),
+                                                                            interspace_coord_df = tibble(),
+                                                                            interspace_list = list(),
+                                                                            centroid_coord_list = list()),
+                                                    planned_spine_list = list(vert_coord_df = tibble(),
+                                                                              vert_coord_list = list(),
+                                                                              interspace_coord_df = tibble(),
+                                                                              interspace_list = list(),
+                                                                              centroid_coord_list = list(),
+                                                                              sa_adjustment_current_df = tibble()))
   
-  # spine_coordinates_reactivevalues <- reactiveValues(spine_build_list = list())
-  
-  # observeEvent(calibration_list$calibration_modifier, ignoreInit = TRUE, {
+
   observe({
     spine_build_list <- list()
     # if(any(names(click_coord_reactive_list$coords) == "c2_centroid")){
@@ -1655,16 +1665,26 @@ server <- function(input, output, session) {
       # print("got to here")
       if(calibration_list$calibration_modifier != 1){
         # print("got to here2")
-        spine_build_list <- jh_build_spine_from_coordinates_function(femoral_head_center = c(click_coord_reactive_list$coords$fem_head_center$x, click_coord_reactive_list$coords$fem_head_center$y),
-                                                                     s1_anterior_superior = c(click_coord_reactive_list$coords$s1_anterior_superior$x, click_coord_reactive_list$coords$s1_anterior_superior$y),
-                                                                     s1_posterior_superior = c(click_coord_reactive_list$coords$s1_posterior_superior$x, click_coord_reactive_list$coords$s1_posterior_superior$y),
-                                                                     centroid_df = xray_centroid_coordinates_reactive_df(),
-                                                                     spine_facing = spine_orientation(),
-                                                                     calibration_modifier = calibration_list$calibration_modifier,
-                                                                     center_femoral_heads = TRUE
-        )
+        # spine_build_list <- jh_build_spine_from_coordinates_function(femoral_head_center = c(click_coord_reactive_list$coords$fem_head_center$x, click_coord_reactive_list$coords$fem_head_center$y),
+        #                                                              s1_anterior_superior = c(click_coord_reactive_list$coords$s1_anterior_superior$x, click_coord_reactive_list$coords$s1_anterior_superior$y),
+        #                                                              s1_posterior_superior = c(click_coord_reactive_list$coords$s1_posterior_superior$x, click_coord_reactive_list$coords$s1_posterior_superior$y),
+        #                                                              centroid_df = xray_centroid_coordinates_reactive_df(),
+        #                                                              spine_facing = spine_orientation(),
+        #                                                              calibration_modifier = calibration_list$calibration_modifier,
+        #                                                              center_femoral_heads = TRUE
+        # )
         
-        print(calibration_list$calibration_modifier)
+        fem_head_center_original <- c(click_coord_reactive_list$coords$fem_head_center$x, click_coord_reactive_list$coords$fem_head_center$y)
+        s1_anterior_superior_original <- c(click_coord_reactive_list$coords$s1_anterior_superior$x, click_coord_reactive_list$coords$s1_anterior_superior$y)
+        s1_posterior_superior_original <- c(click_coord_reactive_list$coords$s1_posterior_superior$x, click_coord_reactive_list$coords$s1_posterior_superior$y)
+        
+        spine_build_list <- jh_construct_spine_coord_df_from_centroids_function(s1_posterior_superior = s1_posterior_superior_original, 
+                                                                         s1_anterior_superior = s1_anterior_superior_original, 
+                                                                         centroid_df = xray_centroid_coordinates_reactive_df(),
+                                                                         femoral_head_center = fem_head_center_original,
+                                                                         spine_orientation = spine_orientation())
+        
+        # print(calibration_list$calibration_modifier)
         
         
         
@@ -1736,25 +1756,25 @@ server <- function(input, output, session) {
       
       
       
-      if(length(spine_build_list_reactivevalues$spine_build_list)>0){
-        
-        
-        # spine_build_list_reactivevalues$spine_build_list$spine_coord_df
-        
-        inf_endplates_df <- spine_build_list_reactivevalues$spine_build_list$spine_coord_df %>%
-          filter(vert_point %in% c("ia", "ip"))
-        
-        sup_endplates_df <- spine_build_list_reactivevalues$spine_build_list$spine_coord_df %>%
-          filter(vert_point %in% c("sa", "sp"))
-        
-        # sup_endplates_df <- spine_xr_build_list$aligned_vert_geometry_df %>%
-        #   select(spine_level, vert_coord_df) %>%
-        #   unnest() %>%
-        #   filter(vert_point %in% c("sa", "sp")) 
-      }else{
-        inf_endplates_df <- tibble(spine_level = c(), x = c(), y = c())
-        sup_endplates_df <- tibble(spine_level = c(), x = c(), y = c())
-      }
+      # if(length(spine_build_list_reactivevalues$spine_build_list)>0){
+      #   
+      #   
+      #   # spine_build_list_reactivevalues$spine_build_list$spine_coord_df
+      #   
+      #   # inf_endplates_df <- spine_build_list_reactivevalues$spine_build_list$vert_coord_list %>%
+      #   #   filter(vert_point %in% c("ia", "ip"))
+      #   # 
+      #   # sup_endplates_df <- spine_build_list_reactivevalues$spine_build_list$vert_coord_list %>%
+      #   #   filter(vert_point %in% c("sa", "sp"))
+      #   
+      #   # sup_endplates_df <- spine_xr_build_list$aligned_vert_geometry_df %>%
+      #   #   select(spine_level, vert_coord_df) %>%
+      #   #   unnest() %>%
+      #   #   filter(vert_point %in% c("sa", "sp")) 
+      # }else{
+      #   inf_endplates_df <- tibble(spine_level = c(), x = c(), y = c())
+      #   sup_endplates_df <- tibble(spine_level = c(), x = c(), y = c())
+      # }
       
       
       
@@ -1963,8 +1983,9 @@ server <- function(input, output, session) {
   # Initialize a reactiveValues dataframe
   spine_segmental_planning_df <- reactiveValues(
     df = tibble(
-      spine_interspace = jh_spine_levels_factors_df$interspace,
+      spine_interspace = rev(jh_spine_levels_factors_df$interspace),
       adjustment = rep(0, length(jh_spine_levels_factors_df$interspace))
+      
     )
   )
   
@@ -1983,6 +2004,10 @@ server <- function(input, output, session) {
     spine_segmental_planning_df$df <- spine_segmental_planning_df$df %>%
       mutate(adjustment = 0)
     
+    spine_build_list_reactivevalues$planned_spine_list  <- spine_build_list_reactivevalues$spine_build_list
+    
+    spine_simulation_planning_reactive_list$planned_geom <- NULL
+    
   })
   
   
@@ -1991,12 +2016,10 @@ server <- function(input, output, session) {
                                                             predicted_pt = NULL,
                                                             plotting_lines_list = list(l1pa = NULL, t4pa = NULL, c2pa = NULL),
                                                             rod_plot = NULL,
+                                                            normal_c2_tilt_geom = NULL,
                                                             rod_coord_df = tibble(), 
                                                             vpa_values_list = list(l1pa = NULL, t9pa = NULL, t4pa = NULL, c2pa = NULL))
   
-  
-  # rod_plot_reactive_list <- reactiveValues(rod_plot = NULL, 
-  #                                          rod_coord_df = tibble())
   
   observe({
     
@@ -2012,140 +2035,114 @@ server <- function(input, output, session) {
       preop_c2_tilt <- preop_c2pa - preop_pelvic_tilt
       
       if(any(spine_segmental_planning_df$df$adjustment != 0)){
-        
-        spine_simulation_planning_reactive_list$preop_geom <- geom_sf(data = st_sfc(spine_build_list$vert_geom_list), 
-                                                                      color = "grey80",
-                                                                      fill = "grey98", 
-                                                                      alpha = 0.4)
-        
-        segmental_planning_df <- spine_segmental_planning_df$df %>%
-          mutate(sa_adjustment = adjustment) %>%
-          arrange(rev(spine_interspace))
-        
-        rotated_spine_list <- jh_rotate_spine_from_coordinates_by_segment_angles_function(spine_build_list = spine_build_list,
-                                                                                          sa_adjustment_df = segmental_planning_df, 
-                                                                                          spine_orientation = "left")
-        
-        spine_simulation_planning_reactive_list$vpa_values_list <-  rotated_spine_list$vpa_list
-        
-        
-        rotated_spine_coord_df <- tibble(spine_level = names(rotated_spine_list$vert_list)) %>%
-          mutate(index_position = row_number()) %>%
-          mutate(xy_coord = map(.x = index_position, .f = ~ rotated_spine_list$vert_list[[.x]]$vert_coord)) %>%
-          mutate(vert_point = map(.x = index_position, .f = ~ names(rotated_spine_list$vert_list[[.x]]$vert_coord))) %>%
-          unnest()  %>%
-          mutate(x = map(.x = xy_coord, .f = ~ .x[[1]])) %>%
-          mutate(y = map(.x = xy_coord, .f = ~ .x[[2]]))  %>%
-          unnest() %>%
-          select(spine_level, vert_point, x, y) %>%
-          distinct() 
-        
-        
-        predicted_pt <- predict_postop_pt_function(postop_c2pa = rotated_spine_list$vpa_list$c2pa,
-                                                   preop_pt = preop_pelvic_tilt,
-                                                   preop_c2_tilt = preop_c2_tilt)
-        
-        spine_simulation_planning_reactive_list$predicted_pt <- predicted_pt
-        
-        pt_change <- preop_pelvic_tilt - predicted_pt
-        
-        pt_adjusted_rotated_spine_df <- rotate_spine_function(spine_df = rotated_spine_coord_df, angle_degrees = pt_change)
-        
-        spine_simulation_planning_reactive_list$pt_adjusted_rotated_spine_df <- pt_adjusted_rotated_spine_df
-        
-        pt_adjusted_rotated_spine_plotting_df <- pt_adjusted_rotated_spine_df %>%
-          filter(vert_point != "centroid") %>%
-          filter(vert_point != "s1_mid")
-        
-        s1_mid_df <- pt_adjusted_rotated_spine_df %>%
-          filter(spine_level == "sacrum", vert_point == "s1_mid")
-        
-        s1_mid <- c(s1_mid_df$x, s1_mid_df$y)
-        
-        spine_simulation_planning_reactive_list$plotting_lines_list <- jh_construct_vpa_lines_from_spine_coord_df_function(spine_coord_df = pt_adjusted_rotated_spine_df,
-                                                                                                                           fem_head_center_coord = c(0,0),
-                                                                                                                           s1_mid = s1_mid)  
-        
-        spine_levels <- unique(pt_adjusted_rotated_spine_df$spine_level)
-        
-        planned_spine_geoms_list <- map(.x = spine_levels, 
-                                        .f = ~ jh_construct_geoms_after_planning_function(vertebral_level_tibble = pt_adjusted_rotated_spine_df %>% filter(spine_level == .x),
-                                                                                          buffer_amount = 3*calibration_list$calibration_modifier))
-        
-        
-        spine_simulation_planning_reactive_list$planned_geom <-geom_sf(data = st_sfc(planned_spine_geoms_list), 
-                                                                       color = "darkblue",
-                                                                       fill = "grey90", 
-                                                                       alpha = 0.8)
-        
-        hypotenuse_length <- max(pt_adjusted_rotated_spine_df$y)
-        
-        c2_tilt_low_rad <- 4*pi/180
-        c2_tilt_high_rad <- 1*pi/180
-        
-        x_c2_tilt_low <- sin(c2_tilt_low_rad)*hypotenuse_length
-        x_c2_tilt_high <- sin(c2_tilt_high_rad)*hypotenuse_length
-        
-        c2_tilt_normal_df <- tibble(x = c(0,
-                                          x_c2_tilt_low,
-                                          x_c2_tilt_high),
-                                    y = c(0, 
-                                          hypotenuse_length,
-                                          hypotenuse_length))
-        
-        spine_simulation_planning_reactive_list$c2_tilt_normal_df <- c2_tilt_normal_df
-        
-        spine_simulation_planning_reactive_list$normal_c2_tilt_geom <-  geom_polygon(data = c2_tilt_normal_df, aes(x = x, y = y), fill = "green", alpha = 0.2)
-        
-        if(input$add_rod){
-          spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(planned_spine_coord_df = pt_adjusted_rotated_spine_df,
-                                                                                                        uiv = input$rod_uiv, number_of_knots = input$rod_knots)
-          
-          spine_simulation_planning_reactive_list$rod_geom <- geom_path(data = spine_simulation_planning_reactive_list$rod_coord_df,
-                                                                        aes(x = x, y = y), 
-                                                                        color = "blue",
-                                                                        size = 2,
-                                                                        lineend = "round",
-                                                                        linejoin = "round")
-          
-          spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
-            spine_simulation_planning_reactive_list$rod_geom +
-            theme_minimal_grid()
-          
-        }else{
-          spine_simulation_planning_reactive_list$rod_geom <- NULL
-          
-          spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
-            spine_simulation_planning_reactive_list$rod_geom +
-            theme_minimal_grid()
-          
-        }
-        
-        
+        preop_spine_list_sf <- jh_construct_spine_geom_sf_function(vert_coord_list = spine_build_list_reactivevalues$spine_build_list$vert_coord_list, 
+                                                                   baseline_spine = TRUE, fade_baseline_spine = TRUE)
       }else{
-        spine_simulation_planning_reactive_list$preop_geom <- geom_sf(data = st_sfc(spine_build_list$vert_geom_list), 
-                                                                      color = "black",
-                                                                      fill = "grey90", 
-                                                                      alpha = 0.8)
-        spine_simulation_planning_reactive_list$planned_geom <- NULL
+        preop_spine_list_sf <- jh_construct_spine_geom_sf_function(vert_coord_list = spine_build_list_reactivevalues$spine_build_list$vert_coord_list, baseline_spine = TRUE)
         
-        spine_simulation_planning_reactive_list$plotting_lines_list <- spine_build_list$lines_list
-        
-        spine_simulation_planning_reactive_list$normal_c2_tilt_geom <- NULL
+      }
+
+      spine_simulation_planning_reactive_list$preop_geom <- preop_spine_list_sf$spine_geom_sf
+
         
         spine_simulation_planning_reactive_list$c2_tilt_normal_df <- tibble(x = c(0),
-                                                                            y = c(max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y))
+                                                                            y = c(max(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$y))
         )
-
-      }
-      
-
+        
     }
   })
   
+  observeEvent(spine_segmental_planning_df$df, ignoreInit = TRUE, {
+      if(length(spine_build_list_reactivevalues$spine_build_list)>0){
+
+        if(any(spine_segmental_planning_df$df$adjustment != 0)){
+          
+          spine_build_list_reactivevalues$planned_spine_list <-  jh_construct_adjusted_spine_list_function(sa_adjustment_df = spine_segmental_planning_df$df,
+                                                                                                           spine_list = spine_build_list_reactivevalues$spine_build_list,
+                                                                                                           spine_orientation = spine_orientation(),
+                                                                                                           adjust_for_pt_change = TRUE)
+          
+          
+          spine_simulation_planning_reactive_list$planned_geom <- jh_construct_spine_geom_sf_function(vert_coord_list = spine_build_list_reactivevalues$planned_spine_list$vert_coord_list,
+                                                                                                      baseline_spine = FALSE)
+        
+          
+          hypotenuse_length <- max(spine_build_list_reactivevalues$planned_spine_list$vert_coord_df$y)
+          
+          c2_tilt_low_rad <- 4*pi/180
+          c2_tilt_high_rad <- 1*pi/180
+          
+          x_c2_tilt_low <- sin(c2_tilt_low_rad)*hypotenuse_length
+          x_c2_tilt_high <- sin(c2_tilt_high_rad)*hypotenuse_length
+          
+          c2_tilt_normal_df <- tibble(x = c(0,
+                                            x_c2_tilt_low,
+                                            x_c2_tilt_high),
+                                      y = c(0,
+                                            hypotenuse_length,
+                                            hypotenuse_length))
+          
+          spine_simulation_planning_reactive_list$c2_tilt_normal_df <- c2_tilt_normal_df
+          
+          spine_simulation_planning_reactive_list$normal_c2_tilt_geom <-  geom_polygon(data = c2_tilt_normal_df, aes(x = x, y = y), fill = "green", alpha = 0.2)
+
+          spine_simulation_planning_reactive_list$l1pa_line_geom <- jh_construct_vpa_line_geoms_from_vert_coord_function(vertebral_level = "l1", 
+                                                                                                                         centroid_coord_list = spine_build_list_reactivevalues$planned_spine_list$centroid_coord_list,
+                                                                                                                         line_color = "blue",
+                                                                                                                         line_size = 0.5) 
+          spine_simulation_planning_reactive_list$t4pa_line_geom <-   jh_construct_vpa_line_geoms_from_vert_coord_function(vertebral_level = "t4", 
+                                                                                                                           centroid_coord_list = spine_build_list_reactivevalues$planned_spine_list$centroid_coord_list,
+                                                                                                                           line_color = "purple",
+                                                                                                                           line_size = 0.5) 
+          spine_simulation_planning_reactive_list$c2pa_line_geom <-   jh_construct_vpa_line_geoms_from_vert_coord_function(vertebral_level = "c2", 
+                                                                                                                           centroid_coord_list = spine_build_list_reactivevalues$planned_spine_list$centroid_coord_list,
+                                                                                                                           line_color = "darkgreen",
+                                                                                                                           line_size = 0.5) 
+          
+        }else{
+          spine_simulation_planning_reactive_list$l1pa_line_geom <- NULL
+          spine_simulation_planning_reactive_list$t4pa_line_geom <-NULL
+          spine_simulation_planning_reactive_list$c2pa_line_geom <-NULL
+        }
+      }
+    
+  })
+  
+  observeEvent(list(input$add_rod, input$rod_uiv, input$rod_knots), ignoreInit = TRUE, {
+    if(input$add_rod){
+      spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(planned_spine_coord_df = spine_build_list_reactivevalues$planned_spine_list$vert_coord_df,
+                                                                                                    uiv = input$rod_uiv, 
+                                                                                                    number_of_knots = input$rod_knots)
+      
+      spine_simulation_planning_reactive_list$rod_geom <- geom_path(data = spine_simulation_planning_reactive_list$rod_coord_df,
+                                                                    aes(x = x, y = y),
+                                                                    color = "blue",
+                                                                    size = 2,
+                                                                    lineend = "round",
+                                                                    linejoin = "round")
+      print(paste("Rod coord_df names: ", toString(names(spine_simulation_planning_reactive_list$rod_coord_df))))
+      print(paste("Rod X coord: ", toString(spine_simulation_planning_reactive_list$rod_coord_df$x)))
+      
+      spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
+        spine_simulation_planning_reactive_list$rod_geom +
+        theme_minimal_grid()
+      
+    }else{
+      spine_simulation_planning_reactive_list$rod_geom <- NULL
+      
+      spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
+        spine_simulation_planning_reactive_list$rod_geom +
+        theme_minimal_grid()
+      
+    }
+    
+  })
+  
+  
   ### alignment planning table ###
   
-  output$planning_parameters_table <- renderTable({
+  # output$planning_parameters_table <- renderTable({
+    output$planning_parameters_table <- render_gt({
     alignment_parameters_list <- reactiveValuesToList(alignment_parameters_reactivevalues_list)
     if(length(alignment_parameters_list > 1)){
       
@@ -2156,73 +2153,102 @@ server <- function(input, output, session) {
                         alignment_parameters_list$t4pa, 
                         alignment_parameters_list$c2pa)
       
-      if(any(spine_segmental_planning_df$df$adjustment != 0)){
-        spine_planning_list <- reactiveValuesToList(spine_simulation_planning_reactive_list)
+      # if(any(spine_segmental_planning_df$df$adjustment != 0)){
+        # spine_planning_list <- reactiveValuesToList(spine_simulation_planning_reactive_list)
+        if(length(spine_build_list_reactivevalues$planned_spine_list$centroid_coord_list)>0){
+        preop_tilt_vpa_list <- jh_calculate_vertebral_tilt_and_vpas_from_coordinates_function(full_centroid_coord_list = spine_build_list_reactivevalues$planned_spine_list$centroid_coord_list,
+                                                                                              spine_orientation = spine_orientation())
+
         
         planned_vector <- c(alignment_parameters_list$pelvic_incidence, 
-                            spine_planning_list$predicted_pt, 
-                            spine_planning_list$vpa_values_list$l1pa, 
-                            spine_planning_list$vpa_values_list$t4pa, 
-                            spine_planning_list$vpa_values_list$c2pa)
+                            preop_tilt_vpa_list$pt_computed, 
+                            preop_tilt_vpa_list$vpa_list$l1, 
+                            preop_tilt_vpa_list$vpa_list$t4, 
+                            preop_tilt_vpa_list$vpa_list$c2)
+        planned_vector <- paste0(round(planned_vector, 1), "º")
       }else{
-        planned_vector <- preop_vector
+        planned_vector <- c("-", "-", "-", "-", "-")
       }
       
-      tibble('Measure' = c("PI",
+      planning_df <- tibble('Measure' = c("PI",
                            "PT", 
                            "L1PA", 
                            "T4PA", 
                            "C2PA"), 
              preop_value = preop_vector,
              planned_value = planned_vector) %>%
-        mutate(preop_value = round(preop_value, 1), 
-               planned_value = round(planned_value, 1)) %>%
-        mutate(preop_value = paste0(preop_value, "º"),
-               planned_value = paste0(planned_value, "º")) %>%
-        rename("Preop" = preop_value, "Planned" = planned_value)  
+        mutate(preop_value = round(preop_value, 1)) %>%
+        mutate(preop_value = paste0(preop_value, "º")
+               ) %>%
+        rename("Preop" = preop_value, "Planned" = planned_value)
+      
+      gt(planning_df) %>%
+        tab_options(
+          table.width = px(200), # Adjust width as needed
+          table.font.size = px(14),
+          data_row.padding = px(2)
+        ) %>%
+        cols_label(
+          Measure = md("**Measure**"), # Bold column name
+          Preop = "Preop",
+          Planned = "Planned"
+        ) %>%
+        tab_style(
+          style = list(cell_text(weight = "bold")),
+          locations = list(cells_column_labels(columns = everything()), cells_body(columns = "Measure"))# Bold Measure column
+        ) 
+        # data_color(
+        #   columns = "Planned",
+        #   colors = scales::col_numeric(
+        #     palette = c("red", "yellow", "green"), 
+        #     domain = c(-10, 0, 10)  # Adjust range based on your values
+        #   )
+        # )
     }
-    
-    
-
     
   })
   
   
-  
   output$preop_spine_simulation_plot <- renderPlot({
-    # spine_simulation_planning_plot()
-    
-    
+
     if(length(spine_build_list_reactivevalues$spine_build_list)>0){
-      ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.1)
+      ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$y)*1.1)
       
       if(max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y) > ylimits[[2]]){
-        ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.25)
+        ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$y)*1.25)
       }
       
-      xlimits <- range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x) + c(-1, 1) * 0.2 * diff(range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x))
+      xrange <- diff(range(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$x))
       
-      if(input$add_rod){
-        if(max(xlimits) < max(spine_simulation_planning_reactive_list$rod_coord_df$x)){
-          xlimits <- c(xlimits[[1]], max(spine_simulation_planning_reactive_list$rod_coord_df$x))
-        }
-        if(min(xlimits) > min(spine_simulation_planning_reactive_list$rod_coord_df$x)){
-          xlimits <- c(xlimits[[1]], min(spine_simulation_planning_reactive_list$rod_coord_df$x))
-        }
+      xmin_limit <- min(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$x)- xrange*0.1
+      xmax_limit <- max(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$x)+ xrange*0.1
+      
+      if(nrow(spine_build_list_reactivevalues$planned_spine_list$vert_coord_df)>0){
+        xmin_limit <- min(c(min(spine_build_list_reactivevalues$planned_spine_list$vert_coord_df$x) - xrange*0.1, xmin_limit))
+        xmax_limit <- max(c(max(spine_build_list_reactivevalues$planned_spine_list$vert_coord_df$x) + xrange*0.1, xmax_limit))
       }
-
+      
+      if(nrow(spine_simulation_planning_reactive_list$rod_coord_df)>0){
+        xmin_limit <- min(c(min(spine_simulation_planning_reactive_list$rod_coord_df$x) - xrange*0.1, xmin_limit))
+        xmax_limit <- max(c(max(spine_simulation_planning_reactive_list$rod_coord_df$x) + xrange*0.1, xmax_limit))
+      }
+      
+      xlimits <- c(xmin_limit, xmax_limit)
+      
+      fem_head_radius <- jh_calculate_distance_between_2_points_function(point_1 = spine_build_list_reactivevalues$spine_build_list$vert_coord_list$sacrum$sa,
+                                                                         point_2 = spine_build_list_reactivevalues$spine_build_list$vert_coord_list$sacrum$sp)*0.5
+      
+      femoral_head_circle_sf <- st_buffer(st_sfc(st_point(c(0, 0))), dist = fem_head_radius)
+      
       ggplot() +
         spine_simulation_planning_reactive_list$normal_c2_tilt_geom +
         spine_simulation_planning_reactive_list$preop_geom +
         spine_simulation_planning_reactive_list$planned_geom +
-        geom_sf(data = spine_build_list_reactivevalues$spine_build_list$fem_head_sf, 
+        geom_sf(data = femoral_head_circle_sf,
                 fill = "grey90") +
-        geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$l1pa, 
-                color = "blue", linewidth = 1)+
-        geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$t4pa, 
-                color = "purple", linewidth = 1) +
-        geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$c2pa, 
-                color = "darkgreen") +
+        spine_simulation_planning_reactive_list$l1pa_line_geom +
+        spine_simulation_planning_reactive_list$t4pa_line_geom +
+        spine_simulation_planning_reactive_list$c2pa_line_geom +
         # theme_void() +
         spine_simulation_planning_reactive_list$rod_geom +
         theme_minimal_grid()+
@@ -2245,6 +2271,63 @@ server <- function(input, output, session) {
     
     
   })
+  
+  # output$preop_spine_simulation_plot <- renderPlot({
+  #   # spine_simulation_planning_plot()
+  #   
+  #   
+  #   if(length(spine_build_list_reactivevalues$spine_build_list)>0){
+  #     ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.1)
+  #     
+  #     if(max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y) > ylimits[[2]]){
+  #       ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.25)
+  #     }
+  #     
+  #     xlimits <- range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x) + c(-1, 1) * 0.2 * diff(range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x))
+  #     
+  #     if(input$add_rod){
+  #       if(max(xlimits) < max(spine_simulation_planning_reactive_list$rod_coord_df$x)){
+  #         xlimits <- c(xlimits[[1]], max(spine_simulation_planning_reactive_list$rod_coord_df$x))
+  #       }
+  #       if(min(xlimits) > min(spine_simulation_planning_reactive_list$rod_coord_df$x)){
+  #         xlimits <- c(xlimits[[1]], min(spine_simulation_planning_reactive_list$rod_coord_df$x))
+  #       }
+  #     }
+  # 
+  #     ggplot() +
+  #       spine_simulation_planning_reactive_list$normal_c2_tilt_geom +
+  #       spine_simulation_planning_reactive_list$preop_geom +
+  #       spine_simulation_planning_reactive_list$planned_geom +
+  #       geom_sf(data = spine_build_list_reactivevalues$spine_build_list$fem_head_sf, 
+  #               fill = "grey90") +
+  #       geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$l1pa, 
+  #               color = "blue", linewidth = 1)+
+  #       geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$t4pa, 
+  #               color = "purple", linewidth = 1) +
+  #       geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$c2pa, 
+  #               color = "darkgreen") +
+  #       # theme_void() +
+  #       spine_simulation_planning_reactive_list$rod_geom +
+  #       theme_minimal_grid()+
+  #       ylim(ylimits) +
+  #       xlim(xlimits) +
+  #       labs(title = "Preop & Planned Alignment") +
+  #       theme(
+  #         # axis.text = element_blank(),
+  #         axis.title = element_blank(),
+  #         plot.title = element_text(
+  #           size = 16,
+  #           hjust = 0.5,
+  #           vjust = -0.5,
+  #           face = "bold.italic"
+  #         ),
+  #         plot.background = element_rect(fill = "transparent", colour = NA),
+  #         panel.background = element_rect(fill = "transparent", colour = NA)
+  #       )
+  #   }
+  #   
+  #   
+  # })
   
 
   output$download_rod_template <- downloadHandler(

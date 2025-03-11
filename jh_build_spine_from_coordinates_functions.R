@@ -28,60 +28,68 @@
 # }
 
 
-jh_find_sacrum_inf_point_function <- function(s1_posterior_sup = c(0,0), 
-                                              s1_anterior_sup = c(1, 1), 
-                                              spine_facing = "right") {
-  
-  inf_s1_line_length <- jh_calculate_distance_between_2_points_function(s1_posterior_sup, s1_anterior_sup)*2.5
-  
-  s1_center <- jh_get_point_along_line_function(coord_a = s1_posterior_sup,
-                                                coord_b = s1_anterior_sup, percent_a_to_b = 0.5)
-  
-  
-  # Extract coordinates for points A and B
-  x1 <- s1_posterior_sup[1]
-  y1 <- s1_posterior_sup[2]
-  x2 <- s1_anterior_sup[1]
-  y2 <- s1_anterior_sup[2]
-  
-  # Calculate the slope of sacrum
-  dx <- x2 - x1
-  dy <- y2 - y1
-  
-  # Check for vertical line case (when dx = 0)
-  if (dx == 0) {
-    # Line is vertical, so perpendicular line is horizontal
-    # Determine the direction based on spine_facing
-    if (spine_facing == "right") {
-      inferior_sacrum <- c(s1_center[1] + inf_s1_line_length, s1_center[2])
-    } else {
-      inferior_sacrum <- c(s1_center[1] - inf_s1_line_length, s1_center[2])
-    }
-  } else {
-    # Calculate the perpendicular slope
-    perp_slope <- -dx / dy
-    
-    # Calculate the angle of the perpendicular line
-    angle_perp <- atan(perp_slope)
-    
-    # Determine direction based on spine_facing
-    if (spine_facing == "right") {
-      inferior_sacrum_x <- s1_center[1] - inf_s1_line_length * cos(angle_perp)
-      inferior_sacrum_y <- s1_center[2] - abs(inf_s1_line_length * sin(angle_perp))
-    } else {
-      inferior_sacrum_x <- s1_center[1] + inf_s1_line_length * cos(angle_perp)
-      inferior_sacrum_y <- s1_center[2] - abs(inf_s1_line_length * sin(angle_perp))
-    }
-    
-    # Set the coordinates for inferior_sacrum
-    inferior_sacrum <- c(x = inferior_sacrum_x, y = inferior_sacrum_y)
-  }
-  
-  # Return the coordinates for inferior_sacrum
-  return(inferior_sacrum)
-  
-  
-}
+# jh_find_sacrum_inf_point_function <- function(s1_posterior_sup = c(0,0), 
+#                                               s1_anterior_sup = c(1, 1), 
+#                                               spine_facing = "right", 
+#                                               inf_length_multiplier = 2.5) {
+#   
+#   if(s1_posterior_sup[[1]]> s1_anterior_sup[[1]]){
+#     spine_orientation <- "left"
+#   }else{
+#     spine_orientation <- "right"
+#   }
+#   
+#   
+#   inf_s1_line_length <- jh_calculate_distance_between_2_points_function(s1_posterior_sup, s1_anterior_sup)*inf_length_multiplier
+#   
+#   s1_center <- jh_get_point_along_line_function(coord_a = s1_posterior_sup,
+#                                                 coord_b = s1_anterior_sup, percent_a_to_b = 0.5)
+#   
+#   
+#   # Extract coordinates for points A and B
+#   x1 <- s1_posterior_sup[1]
+#   y1 <- s1_posterior_sup[2]
+#   x2 <- s1_anterior_sup[1]
+#   y2 <- s1_anterior_sup[2]
+#   
+#   # Calculate the slope of sacrum
+#   dx <- x2 - x1
+#   dy <- y2 - y1
+#   
+#   # Check for vertical line case (when dx = 0)
+#   if (dx == 0) {
+#     # Line is vertical, so perpendicular line is horizontal
+#     # Determine the direction based on spine_facing
+#     if (spine_orientation == "right") {
+#       inferior_sacrum <- c(s1_center[1] + inf_s1_line_length, s1_center[2])
+#     } else {
+#       inferior_sacrum <- c(s1_center[1] - inf_s1_line_length, s1_center[2])
+#     }
+#   } else {
+#     # Calculate the perpendicular slope
+#     perp_slope <- -dx / dy
+#     
+#     # Calculate the angle of the perpendicular line
+#     angle_perp <- atan(perp_slope)
+#     
+#     # Determine direction based on spine_facing
+#     if (spine_facing == "right") {
+#       inferior_sacrum_x <- s1_center[1] - inf_s1_line_length * cos(angle_perp)
+#       inferior_sacrum_y <- s1_center[2] - abs(inf_s1_line_length * sin(angle_perp))
+#     } else {
+#       inferior_sacrum_x <- s1_center[1] + inf_s1_line_length * cos(angle_perp)
+#       inferior_sacrum_y <- s1_center[2] - abs(inf_s1_line_length * sin(angle_perp))
+#     }
+#     
+#     # Set the coordinates for inferior_sacrum
+#     inferior_sacrum <- c(x = inferior_sacrum_x, y = inferior_sacrum_y)
+#   }
+#   
+#   # Return the coordinates for inferior_sacrum
+#   return(inferior_sacrum)
+#   
+#   
+# }
 
 
 jh_find_fem_head_center_given_pi_and_thickness_function <- function(inf_sacrum, s1_center, length_s1_fem, angle_degrees) {

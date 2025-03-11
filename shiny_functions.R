@@ -375,9 +375,12 @@ generate_spine_level_controls <- function(spine_level) {
 
 }
 
-update_spine_segmental_planning_df_function <- function(spine_segmental_planning_df, spine_interspace_input, change) {
+update_spine_segmental_planning_df_function <- function(spine_segmental_planning_df,
+                                                        spine_interspace_input, 
+                                                        change) {
   spine_segmental_planning_df$df <- spine_segmental_planning_df$df %>%
     mutate(adjustment = if_else(spine_interspace == spine_interspace_input, adjustment + change, adjustment))
+    # mutate(adjustment_performed = if_else(spine_interspace == spine_interspace_input, "no", adjustment_performed))
 }
 
 
@@ -413,12 +416,13 @@ jh_construct_rod_coordinates_function <- function(planned_spine_coord_df, uiv = 
   spine_coord_for_rod_list <- jh_convert_spine_coord_df_to_lists_function(planned_spine_coord_df)
   
   inferior_rod_point <- jh_get_point_along_line_function(coord_a = spine_coord_for_rod_list$l5$ip, 
-                                                         coord_b = spine_coord_for_rod_list$sacrum$s1_posterior_superior, 
-                                                         percent_a_to_b = 3)
+                                                         coord_b = spine_coord_for_rod_list$sacrum$sp, 
+                                                         percent_a_to_b = 10)
   
   superior_rod_point <-  spine_coord_for_rod_list[[which(names(spine_coord_for_rod_list) == str_to_lower(uiv)) + 1]]$ip
   
-  s1_length <- jh_calculate_distance_between_2_points_function(point_1 = spine_coord_for_rod_list$sacrum$s1_anterior_superior, point_2 = spine_coord_for_rod_list$sacrum$s1_posterior_superior)
+  s1_length <- jh_calculate_distance_between_2_points_function(point_1 = spine_coord_for_rod_list$sacrum$sa, 
+                                                               point_2 = spine_coord_for_rod_list$sacrum$sp)
   
   rod_coord_df <- planned_spine_coord_df %>%
     filter(vert_point %in% c("s1_posterior_superior", "sp")) %>%

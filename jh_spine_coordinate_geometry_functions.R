@@ -11,7 +11,68 @@ predict_postop_pt_function <-  function(preop_c2_tilt = 1.5912083,
   -0.018071724-0.26959853*preop_c2_tilt+0.17554658*preop_pt+0.83058112*postop_c2pa 
   }
 
-
+jh_find_sacrum_inf_point_function <- function(s1_posterior_sup = c(0,0), 
+                                              s1_anterior_sup = c(1, 1), 
+                                              spine_facing = "right", 
+                                              inf_length_multiplier = 2.5) {
+  
+  if(s1_posterior_sup[[1]]> s1_anterior_sup[[1]]){
+    spine_orientation <- "left"
+  }else{
+    spine_orientation <- "right"
+  }
+  
+  
+  inf_s1_line_length <- jh_calculate_distance_between_2_points_function(s1_posterior_sup, s1_anterior_sup)*inf_length_multiplier
+  
+  s1_center <- jh_get_point_along_line_function(coord_a = s1_posterior_sup,
+                                                coord_b = s1_anterior_sup, percent_a_to_b = 0.5)
+  
+  
+  # Extract coordinates for points A and B
+  x1 <- s1_posterior_sup[1]
+  y1 <- s1_posterior_sup[2]
+  x2 <- s1_anterior_sup[1]
+  y2 <- s1_anterior_sup[2]
+  
+  # Calculate the slope of sacrum
+  dx <- x2 - x1
+  dy <- y2 - y1
+  
+  # Check for vertical line case (when dx = 0)
+  if (dx == 0) {
+    # Line is vertical, so perpendicular line is horizontal
+    # Determine the direction based on spine_facing
+    if (spine_orientation == "right") {
+      inferior_sacrum <- c(s1_center[1] + inf_s1_line_length, s1_center[2])
+    } else {
+      inferior_sacrum <- c(s1_center[1] - inf_s1_line_length, s1_center[2])
+    }
+  } else {
+    # Calculate the perpendicular slope
+    perp_slope <- -dx / dy
+    
+    # Calculate the angle of the perpendicular line
+    angle_perp <- atan(perp_slope)
+    
+    # Determine direction based on spine_facing
+    if (spine_facing == "right") {
+      inferior_sacrum_x <- s1_center[1] - inf_s1_line_length * cos(angle_perp)
+      inferior_sacrum_y <- s1_center[2] - abs(inf_s1_line_length * sin(angle_perp))
+    } else {
+      inferior_sacrum_x <- s1_center[1] + inf_s1_line_length * cos(angle_perp)
+      inferior_sacrum_y <- s1_center[2] - abs(inf_s1_line_length * sin(angle_perp))
+    }
+    
+    # Set the coordinates for inferior_sacrum
+    inferior_sacrum <- c(x = inferior_sacrum_x, y = inferior_sacrum_y)
+  }
+  
+  # Return the coordinates for inferior_sacrum
+  return(inferior_sacrum)
+  
+  
+}
 
 target_l1pa_function <- function(pelvic_incidence = 51.813768) {-19 + 0.5*pelvic_incidence}
 
@@ -75,32 +136,32 @@ jh_create_vertebra_from_coordinates_function <- function(centroid_x = 0, centroi
 
 
 
-jh_rotate_polygon_around_centroid <- function(polygon, angle_degrees) {
-  # Step 1: Get the centroid of the polygon
-  centroid <- st_centroid(polygon)
-  centroid_coords <- st_coordinates(centroid)[1, 1:2]  # Ensure this is a 2D vector (x, y)
-  
-  # Step 2: Translate the polygon to have the centroid at the origin
-  coords <- st_coordinates(polygon)[, 1:2]  # Extract the polygon's coordinates
-  translated_coords <- sweep(coords, 2, centroid_coords)  # Subtract centroid from coordinates
-  
-  # Step 3: Create a rotation matrix
-  angle_radians <- angle_degrees * pi / 180  # Convert angle to radians
-  rotation_matrix <- matrix(c(cos(angle_radians), -sin(angle_radians),
-                              sin(angle_radians),  cos(angle_radians)),
-                            ncol = 2, byrow = TRUE)
-  
-  # Step 4: Apply the rotation matrix to the translated coordinates
-  rotated_coords <- translated_coords %*% rotation_matrix
-  
-  # Step 5: Translate the polygon back to its original position
-  final_coords <- sweep(rotated_coords, 2, centroid_coords, "+")
-  
-  # Step 6: Rebuild the rotated polygon
-  rotated_polygon <- st_polygon(list(final_coords))
-  
-  return(st_sfc(rotated_polygon, crs = st_crs(polygon)))
-}
+# jh_rotate_polygon_around_centroid <- function(polygon, angle_degrees) {
+#   # Step 1: Get the centroid of the polygon
+#   centroid <- st_centroid(polygon)
+#   centroid_coords <- st_coordinates(centroid)[1, 1:2]  # Ensure this is a 2D vector (x, y)
+#   
+#   # Step 2: Translate the polygon to have the centroid at the origin
+#   coords <- st_coordinates(polygon)[, 1:2]  # Extract the polygon's coordinates
+#   translated_coords <- sweep(coords, 2, centroid_coords)  # Subtract centroid from coordinates
+#   
+#   # Step 3: Create a rotation matrix
+#   angle_radians <- angle_degrees * pi / 180  # Convert angle to radians
+#   rotation_matrix <- matrix(c(cos(angle_radians), -sin(angle_radians),
+#                               sin(angle_radians),  cos(angle_radians)),
+#                             ncol = 2, byrow = TRUE)
+#   
+#   # Step 4: Apply the rotation matrix to the translated coordinates
+#   rotated_coords <- translated_coords %*% rotation_matrix
+#   
+#   # Step 5: Translate the polygon back to its original position
+#   final_coords <- sweep(rotated_coords, 2, centroid_coords, "+")
+#   
+#   # Step 6: Rebuild the rotated polygon
+#   rotated_polygon <- st_polygon(list(final_coords))
+#   
+#   return(st_sfc(rotated_polygon, crs = st_crs(polygon)))
+# }
 
 
 
@@ -132,7 +193,33 @@ jh_rotate_polygon_around_centroid <- function(polygon, angle_degrees) {
 }
 
 
-rotate_spine_function <- function(spine_df, angle_degrees, point_of_rotation = c(0, 0)) {
+# rotate_spine_function <- function(spine_df, angle_degrees, point_of_rotation = c(0, 0)) {
+#   # Convert angle to radians
+#   angle_rad <- angle_degrees * pi / 180
+#   
+#   # Extract rotation center
+#   x_center <- point_of_rotation[1]
+#   y_center <- point_of_rotation[2]
+#   
+#   # Rotation matrix components
+#   cos_theta <- cos(angle_rad)
+#   sin_theta <- sin(angle_rad)
+#   
+#   # Apply rotation to x, y coordinates relative to the rotation point
+#   spine_df <- spine_df %>%
+#     mutate(
+#       x_shifted = x - x_center,
+#       y_shifted = y - y_center,
+#       x_rot = x_shifted * cos_theta - y_shifted * sin_theta + x_center,
+#       y_rot = x_shifted * sin_theta + y_shifted * cos_theta + y_center
+#     ) %>%
+#     select(spine_level, vert_point, x_rot, y_rot) %>%
+#     rename(x = x_rot, y = y_rot)
+#   
+#   return(spine_df)
+# }
+
+jh_rotate_spine_for_pt_adjustment_function_function <- function(spine_df, angle_degrees, point_of_rotation = c(0, 0)) {
   # Convert angle to radians
   angle_rad <- angle_degrees * pi / 180
   
@@ -158,6 +245,38 @@ rotate_spine_function <- function(spine_df, angle_degrees, point_of_rotation = c
   return(spine_df)
 }
 
+jh_rotate_proximal_spine_at_segment_function <- function(spine_df, 
+                                                         interspace, 
+                                                         angle_degrees, 
+                                                         point_of_rotation = c(0, 0),
+                                                         spine_orientation = "left"){
+  # Convert angle to radians
+  orientation_modifier <- if_else(spine_orientation == "left", -1, 1)
+  angle_rad <- (angle_degrees * pi / 180)*orientation_modifier
+  
+  
+  
+  # Extract rotation center
+  x_center <- point_of_rotation[1]
+  y_center <- point_of_rotation[2]
+  
+  # Rotation matrix components
+  cos_theta <- cos(angle_rad)
+  sin_theta <- sin(angle_rad)
+  
+  # Apply rotation to x, y coordinates relative to the rotation point
+  spine_df <- spine_df %>%
+    mutate(
+      x_shifted = x - x_center,
+      y_shifted = y - y_center,
+      x_rot = x_shifted * cos_theta - y_shifted * sin_theta + x_center,
+      y_rot = x_shifted * sin_theta + y_shifted * cos_theta + y_center
+    ) %>%
+    select(spine_level, vert_point, x_rot, y_rot) %>%
+    rename(x = x_rot, y = y_rot)
+  
+  return(spine_df)
+}
 
 # jh_construct_geoms_after_planning_function <- function(vertebral_level_tibble, buffer_amount = 0){
 #   coord_list_df <- vertebral_level_tibble %>%

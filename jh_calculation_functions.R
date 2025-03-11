@@ -255,6 +255,73 @@ jh_calculate_pelvic_incidence_line_coordinates <- function(fem_head_center = c(0
 
 
 
+jh_calculate_vertebral_tilt_function <- function(vertebral_centroid, 
+                                                 femoral_head_center = c(0,0), 
+                                                 spine_orientation = "left", 
+                                                 pelvic_tilt_modifier = FALSE){
+  
+  if(pelvic_tilt_modifier == FALSE){
+    if(spine_orientation == "left"){
+      if(femoral_head_center[[1]] < vertebral_centroid[[1]]){
+        orientation_modifier <- -1
+      }else{
+        orientation_modifier <- 1
+      }
+    }else{
+      if(femoral_head_center[[1]] < vertebral_centroid[[1]]){
+        orientation_modifier <- 1
+      }else{
+        orientation_modifier <- -1
+      }
+    } 
+  }else{
+    orientation_modifier <- 1
+  }
+  
+  plumb_line_point <- c(femoral_head_center[[1]], femoral_head_center[[2]]+100)
+  
+  # Compute vectors
+  v1 <- c(plumb_line_point[[1]] - femoral_head_center[[1]], plumb_line_point[[2]] - femoral_head_center[[2]])
+  v2 <- c(vertebral_centroid[[1]] - femoral_head_center[[1]], vertebral_centroid[[2]] - femoral_head_center[[2]])
+  # Compute dot product
+  dot_product <- sum(v1 * v2)
+  # Compute magnitudes
+  norm_v1 <- sqrt(sum(v1^2))
+  norm_v2 <- sqrt(sum(v2^2))
+  # Compute angle in radians
+  angle_rad <- acos(dot_product / (norm_v1 * norm_v2))
+  # Convert to degrees
+  angle_deg <- round(angle_rad * (180 / pi), 1)*orientation_modifier
+  
+  return(angle_deg)
+  
+}
+
+jh_calculate_vertebral_tilt_and_vpas_from_coordinates_function <- function(full_centroid_coord_list, 
+                                                                           spine_orientation){
+  
+  pt_computed <- jh_calculate_vertebral_tilt_function(vertebral_centroid = full_centroid_coord_list$s1, 
+                                                      femoral_head_center = full_centroid_coord_list$femoral_head, 
+                                                      pelvic_tilt_modifier = TRUE,
+                                                      spine_orientation = spine_orientation)
+  
+  centroid_list_for_vpa_calc <- full_centroid_coord_list
+  centroid_list_for_vpa_calc$femoral_head <- NULL
+  centroid_list_for_vpa_calc$s1 <- NULL
+  
+  vert_tilt_list <- map(.x = centroid_list_for_vpa_calc, .f = ~ jh_calculate_vertebral_tilt_function(vertebral_centroid = .x, 
+                                                                                                     femoral_head_center = full_centroid_coord_list$femoral_head, 
+                                                                                                     spine_orientation = spine_orientation,
+                                                                                                     pelvic_tilt_modifier = FALSE))
+  vpa_list <- map(.x = vert_tilt_list, .f = ~ pt_computed + .x)
+  
+  vert_tilt_list <- c(list(pt = pt_computed), vert_tilt_list)
+  
+  return(list(vert_tilt_list = vert_tilt_list, 
+              vpa_list = vpa_list,
+              pt_computed = pt_computed))
+}
+
 
 # compute_perpendicular_points <- function(x1, y1, x2, y2, distance = 0.01) {
 #   # Midpoint
