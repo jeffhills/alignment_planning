@@ -23,6 +23,7 @@ library(magick)
 # library(ggforce)
 # library(plotly)
 library(redcapAPI)
+library(gt)
 
 
 
@@ -91,8 +92,7 @@ ui <- dashboardPage(
     width: 50px;
   }
 ")),
-    # fileInput("image", "Upload an Image", accept = c('image/png', 'image/jpeg', 'image/jpg')), 
-    fileInput("image", "Upload an Image", accept = 'image/'), 
+    # fileInput("image", "Upload an Image", accept = 'image/'), 
     br(), 
     conditionalPanel(
       condition = "input.xray_file_uploaded == true",
@@ -139,6 +139,102 @@ ui <- dashboardPage(
     )
   ),
   dashboardBody(
+    tags$head(tags$style(HTML("
+    .file-upload-container {
+      border: 4px dashed #c5c5c5;
+      border-radius: 10px;
+      width: 80%;
+      margin: 50px auto;
+      padding: 50px;
+      text-align: center;
+      background-color: #f7f9fb;
+      cursor: pointer;
+      font-size: 18px;
+      color: #333;
+      transition: background-color 0.3s ease;
+      position: relative;
+    }
+    .file-upload-container.dragover {
+      background-color: #edf2f7;
+    }
+    .browse-btn {
+      color: #007bff;
+      font-weight: bold;
+      cursor: pointer;
+      display: inline-block;
+      font-size: 20px;
+      margin-top: 10px;
+    }
+    .upload-icon {
+      font-size: 50px;
+      color: #007bff;
+      margin-bottom: 10px;
+    }
+    /* Hide the fileInput element using opacity and position */
+    #image {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+      opacity: 0; /* Make it transparent */
+    }
+    #image_progress {
+      display: none;
+    }
+  "))),
+    
+    tags$script(HTML("
+    $(document).on('shiny:connected', function() {
+      var container = $('.file-upload-container');
+
+      container.on('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        container.addClass('dragover');
+      });
+
+      container.on('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        container.removeClass('dragover');
+      });
+
+      container.on('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        container.removeClass('dragover');
+        var files = e.originalEvent.dataTransfer.files;
+        var fileInput = $('#image')[0];
+        fileInput.files = files;
+        fileInput.dispatchEvent(new Event('change'));
+      });
+
+      container.on('click', function() {
+        $('#image').click();
+      });
+    });
+  ")),
+    conditionalPanel(
+      condition = "input.xray_file_uploaded == false",
+      fluidRow(
+        column(width = 12, align = "center",
+               div(class = "file-upload-container",
+                   icon("upload", class = "upload-icon"),
+                   div(
+                     "Click Browse to Upload or Drag and Drop an Image",
+                     class = "browse-btn",
+                     onclick = "$('#image').click();"
+                   ),
+                   fileInput("image", label = NULL, accept = 'image/', width = "100%") 
+               ),
+               div(class = "shiny-file-input-progress")
+        )
+      )
+    ),
     tags$head(
       tags$style(HTML("
     .nav-tabs-custom > .nav-tabs {
@@ -156,6 +252,8 @@ ui <- dashboardPage(
     }
   "))
     ),
+    conditionalPanel(
+      condition = "input.xray_file_uploaded == true",
     # Boxes need to be put in a row (or column)
     fluidRow(
       ########## MAIN PAGE COLUMN 1 STARTS HERE: ##############
@@ -202,7 +300,7 @@ ui <- dashboardPage(
                      column(width = 12, 
                             tags$div(
                               id = "image-container",
-                              style = "position: relative; width: 350px; height: 700px; overflow: hidden; border: 0px solid #ccc;",
+                              style = "position: relative; width: auto; height: 700px; overflow: hidden; border: 0px solid #ccc;",
                               tags$img(
                                 id = "uploadedImage",
                                 src = "",
@@ -394,7 +492,7 @@ ui <- dashboardPage(
                      column(width = 12, 
                             tags$div(
                               id = "image-plot-container",
-                              style = "position: relative; width: 350px; height: 700px; overflow: hidden; border: 0px solid #ccc;",
+                              style = "position: relative; width: auto; height: 700px; overflow: hidden; border: 0px solid #ccc;",
                               tags$img(
                                 id = "uploadedImagePlot",
                                 src = "",
@@ -745,6 +843,7 @@ ui <- dashboardPage(
       #        )
       # )
     )
+  )
   )
 )
 
