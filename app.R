@@ -182,10 +182,12 @@ ui <- dashboardPage(
       border: 0;
       opacity: 0; /* Make it transparent */
     }
-    #image_progress {
-      display: none;
-    }
   "))),
+    tags$style(HTML("
+  #alignment_adjustment_box {
+    padding: 0px !important;
+  }
+")),
     
     tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -214,7 +216,7 @@ ui <- dashboardPage(
       });
 
       container.on('click', function() {
-        $('#image').click();
+        $('input[id=\"image\"]').click();
       });
     });
   ")),
@@ -223,13 +225,29 @@ ui <- dashboardPage(
       fluidRow(
         column(width = 12, align = "center",
                div(class = "file-upload-container",
-                   icon("upload", class = "upload-icon"),
                    div(
-                     "Click Browse to Upload or Drag and Drop an Image",
-                     class = "browse-btn",
-                     onclick = "$('#image').click();"
+                     fluidRow(align = "center",
+                              tags$span(icon("upload", class = "upload-icon", style = "font-size: 60px; color: #007bff; cursor: pointer;")),
+                              br(),
+                              span("Drag & Drop or ", 
+                                   span("Choose an X-ray", class = "browse-btn"))
+                     )
                    ),
-                   fileInput("image", label = NULL, accept = 'image/', width = "100%") 
+                   # fluidRow(align = "center",
+                   #   icon("upload", class = "upload-icon")
+                   #   ),
+                   # div(
+                   #   "Choose an X-ray or Drag and Drop Here",
+                   #   class = "browse-btn",
+                   #   onclick = "$('input[id=\"image\"]').click();"
+                   # ),
+                   div(
+                     style = "display: none;",
+                     fileInput("image", 
+                               label = NULL,
+                               accept = 'image/', 
+                               width = "100%")  
+                   )
                ),
                div(class = "shiny-file-input-progress")
         )
@@ -716,7 +734,7 @@ ui <- dashboardPage(
                      #        gt_output(outputId = "planning_parameters_table")
                      #        # tableOutput(outputId = "planning_parameters_table")
                      # ),
-                     column(width = 7, 
+                     column(width = 6, 
                             fluidRow(plotOutput(outputId = "preop_spine_simulation_plot",
                                        height = "750px")
                                      ), 
@@ -744,7 +762,7 @@ ui <- dashboardPage(
                               )
                             )
                      ),
-                     column(width = 5, 
+                     column(width = 6, 
                             tags$script(HTML("
              $(document).ready(function() {
              $('.btn-group button').on('click', function() {
@@ -755,32 +773,35 @@ ui <- dashboardPage(
                               ")),
                             conditionalPanel(
                               condition = "input.all_points_recorded == true",
-                              box(width = 12, title = "Surgical Correction:",
                                   box(width = 12,
                                       title = "Cervical", 
                                       collapsible = TRUE, 
                                       collapsed = TRUE,
+                                      id = "alignment_adjustment_box-box",
                                       tags$table(width = "100%",
                                                  map(.x = jh_spine_levels_factors_df$interspace[1:7], 
                                                      .f = ~ generate_spine_level_controls(spine_level = .x))
                                       )
                                   ),
-                                  box(width = 12,title = "Thoracic", 
-                                      collapsible = TRUE, 
+                                  box(width = 12,
+                                      title = "Thoracic",
+                                      collapsible = TRUE,
                                       collapsed = FALSE,
+                                      id = "alignment_adjustment_box",
                                       tags$table(width = "100%",
-                                                 map(.x = jh_spine_levels_factors_df$interspace[8:19], 
+                                                 map(.x = jh_spine_levels_factors_df$interspace[8:19],
                                                      .f = ~ generate_spine_level_controls(spine_level = .x))
                                       )
-                                  ),
+                                ),
                                   box(width = 12,title = "Lumbar", 
                                       collapsible = TRUE, 
                                       collapsed = FALSE,
+                                      id = "alignment_adjustment_box",
                                       tags$table(width = "100%",
                                                  map(.x = jh_spine_levels_factors_df$interspace[20:24], 
                                                      .f = ~ generate_spine_level_controls(spine_level = .x))
                                       )
-                                  ),
+                                ),
                                   actionBttn(
                                     size = "md",
                                     inputId = "segmental_planning_reset",
@@ -792,7 +813,7 @@ ui <- dashboardPage(
                                   ),
                                   tableOutput(outputId = "spine_segmental_planning_df")
                                   
-                              )
+                              # )
                             )
                      )
                    )
