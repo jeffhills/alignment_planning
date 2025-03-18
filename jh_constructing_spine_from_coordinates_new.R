@@ -133,7 +133,7 @@ jh_construct_spine_geom_sf_function <- function(vert_coord_list, baseline_spine 
       return_list$spine_geom_sf <- geom_sf(data = return_list$vert_polygon_df, aes(geometry = geometry),
                                            color = "lightgrey",
                                            fill = "lightgrey", 
-                                           alpha = 0.4) 
+                                           alpha = 0.25) 
       
     }else{
       return_list$spine_geom_sf <- geom_sf(data = return_list$vert_polygon_df, aes(geometry = geometry),

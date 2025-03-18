@@ -1,14 +1,9 @@
-#library(colourpicker)
 library(shiny)
-# library(shinyjs)
-# library(reactlog)
 library(sf)
 library(tidyverse)
 library(ggplot2)
 library(shinyWidgets)
 library(shinyBS)
-# library(kableExtra)
-# library(rms)
 library(svglite)
 library(glue)
 library(cowplot)
@@ -29,22 +24,10 @@ library(gt)
 
 options(shiny.maxRequestSize = 25*1024^2)
 
-# source("jh_functions.R", local = TRUE)
 source("shiny_functions.R", local = TRUE)
 source("jh_calculation_functions.R", local = TRUE)
 source("jh_spine_coordinate_geometry_functions.R", local = TRUE)
-# source("compute_segment_angles_function_from_sim_data_2024.R", local = TRUE)
-# source("function_segment_angles_separated.R", local = TRUE)
 
-# source("jh_spine_build_NEW_function.R", local = TRUE)
-
-# source("jh_prescribing_alignment_functions.R", local = TRUE)
-
-# source("spinal_regional_alignment_analysis_by_vpa.R", local = TRUE)
-
-# source("jh_build_spine_by_vertebral_pelvic_angles_cleaned.R", local = TRUE)
-# source("prescribing_alignment_by_matching_unfused.R", local = TRUE)
-# source("xray_segment_angles_model_functions.R", local = TRUE)
 source("jh_build_spine_from_coordinates_functions.R", local = TRUE)
 
 source("jh_constructing_spine_from_coordinates_new.R", local = TRUE)
@@ -92,7 +75,6 @@ ui <- dashboardPage(
     width: 50px;
   }
 ")),
-    # fileInput("image", "Upload an Image", accept = 'image/'), 
     br(), 
     conditionalPanel(
       condition = "input.xray_file_uploaded == true",
@@ -139,6 +121,20 @@ ui <- dashboardPage(
     )
   ),
   dashboardBody(
+    tags$div(
+      id = "loading-overlay",
+      style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+           background-color: #fff; z-index: 9999; display: flex; 
+           justify-content: center; align-items: center;",
+      tags$div(
+        tags$p("Loading...")
+      )
+    ),
+    tags$script("
+  $(document).on('shiny:idle', function() {
+    $('#loading-overlay').fadeOut(500);
+  });
+"),
     tags$head(tags$style(HTML("
     .file-upload-container {
       border: 4px dashed #c5c5c5;
@@ -170,7 +166,6 @@ ui <- dashboardPage(
       color: #007bff;
       margin-bottom: 10px;
     }
-    /* Hide the fileInput element using opacity and position */
     #image {
       position: absolute;
       width: 1px;
@@ -188,66 +183,66 @@ ui <- dashboardPage(
     padding: 0px !important;
   }
 ")),
-    
     tags$script(HTML("
-    $(document).on('shiny:connected', function() {
-      var container = $('.file-upload-container');
+  $(document).on('shiny:connected', function() {
+    var container = $('.file-upload-container');
+    var fileInput = $('#image');
 
-      container.on('dragover', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        container.addClass('dragover');
-      });
-
-      container.on('dragleave', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        container.removeClass('dragover');
-      });
-
-      container.on('drop', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        container.removeClass('dragover');
-        var files = e.originalEvent.dataTransfer.files;
-        var fileInput = $('#image')[0];
-        fileInput.files = files;
-        fileInput.dispatchEvent(new Event('change'));
-      });
-
-      container.on('click', function() {
-        $('input[id=\"image\"]').click();
-      });
+    container.on('dragover', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      container.addClass('dragover');
     });
-  ")),
+
+    container.on('dragleave', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      container.removeClass('dragover');
+    });
+
+    container.on('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      container.removeClass('dragover');
+      var files = e.originalEvent.dataTransfer.files;
+      fileInput[0].files = files;
+      fileInput.trigger('change');
+    });
+  // Make the file input visible but positioned off-screen instead of using display:none
+  fileInput.css({
+    'position': 'absolute',
+    'top': '-9999px',
+    'opacity': '0',
+    'visibility': 'hidden',
+    'pointer-events': 'none'
+  });
+  
+  // Add a more direct click handler
+  container.on('click', function() {
+    // Unbind any previous click handlers from the file input
+    fileInput.off('click');
+    // Trigger the file input click manually
+    setTimeout(function() {
+      fileInput.trigger('click');
+    }, 50);
+  });
+});
+")),
     conditionalPanel(
       condition = "input.xray_file_uploaded == false",
       fluidRow(
         column(width = 12, align = "center",
                div(class = "file-upload-container",
-                   div(
-                     fluidRow(align = "center",
-                              tags$span(icon("upload", class = "upload-icon", style = "font-size: 60px; color: #007bff; cursor: pointer;")),
-                              br(),
-                              span("Drag & Drop or ", 
-                                   span("Choose an X-ray", class = "browse-btn"))
-                     )
-                   ),
-                   # fluidRow(align = "center",
-                   #   icon("upload", class = "upload-icon")
-                   #   ),
-                   # div(
-                   #   "Choose an X-ray or Drag and Drop Here",
-                   #   class = "browse-btn",
-                   #   onclick = "$('input[id=\"image\"]').click();"
-                   # ),
-                   div(
-                     style = "display: none;",
-                     fileInput("image", 
-                               label = NULL,
-                               accept = 'image/', 
-                               width = "100%")  
+                   fluidRow(align = "center",
+                            tags$span(icon("upload", class = "upload-icon", 
+                                           style = "font-size: 60px; color: #007bff; cursor: pointer;")),
+                            br(),
+                            span("Drag & Drop or ", span("Choose an X-ray", class = "browse-btn")),
                    )
+               ),
+               div(
+                 style = "display: none;",  # Hide the entire div, including the switch
+                 fileInput("image", label = NULL, accept = 'image/', width = "100%")
                ),
                div(class = "shiny-file-input-progress")
         )
@@ -271,7 +266,7 @@ ui <- dashboardPage(
   "))
     ),
     conditionalPanel(
-      condition = "input.xray_file_uploaded == true",
+      condition = "input.xray_file_uploaded == true", 
     # Boxes need to be put in a row (or column)
     fluidRow(
       ########## MAIN PAGE COLUMN 1 STARTS HERE: ##############
@@ -280,8 +275,8 @@ ui <- dashboardPage(
       
       column(width = 4, 
              box(width = 12,
-                 conditionalPanel(
-                   condition = "input.xray_file_uploaded == true",
+                 # conditionalPanel(
+                 #   condition = "input.xray_file_uploaded == true",
                    fluidRow(
                      class = "d-flex justify-content-center",  # Center content horizontally
                      tags$div(
@@ -310,8 +305,8 @@ ui <- dashboardPage(
                        )
                      ),
                      # br()
-                   )
-                 ),
+                   ),
+                 # ),
                  conditionalPanel(
                    condition = "input.xray_file_uploaded == true & input.all_points_recorded == false",
                    fluidRow(
@@ -645,8 +640,8 @@ ui <- dashboardPage(
                      )
                    )
                  ),
-                 conditionalPanel(
-                   condition = "input.xray_file_uploaded == true",
+                 # conditionalPanel(
+                 #   condition = "input.xray_file_uploaded == true",
                    br(),
                    fluidRow(
                      column(
@@ -672,22 +667,8 @@ ui <- dashboardPage(
                          color = "danger",
                          icon = icon("trash-can")
                        )
-                     ),
+                     )
                    )
-                   # fluidRow(
-                   #   conditionalPanel(
-                   #     condition = "input.xray_file_uploaded == true",
-                   #     h4("Xray Orientation:"),
-                   #     actionBttn(
-                   #       inputId = "spine_orientation_button",
-                   #       label = "Facing LEFT", 
-                   #       style = "material-flat",
-                   #       color = "primary",
-                   #       icon = icon("arrow-left")
-                   #     )
-                   #   )
-                   # )
-                 )
              )
       ),
       
@@ -730,19 +711,18 @@ ui <- dashboardPage(
                                     )
                    ),
                    fluidRow(
-                     # column(width = 3, 
-                     #        gt_output(outputId = "planning_parameters_table")
-                     #        # tableOutput(outputId = "planning_parameters_table")
-                     # ),
                      column(width = 6, 
-                            fluidRow(plotOutput(outputId = "preop_spine_simulation_plot",
+                            h3("Preop & Planned Alignment"),
+                            fluidRow(
+                              plotOutput(outputId = "preop_spine_simulation_plot",
+                                         width = "auto",
                                        height = "750px")
                                      ), 
                             fluidRow(
-                              column(width = 6, 
+                              column(width = 7, 
                                      gt_output(outputId = "planning_parameters_table") 
                               ),
-                              column(width = 6, 
+                              column(width = 5, 
                                      div(
                                        style = "text-align: center;",
                                        switchInput(inputId = "add_rod", label = "Add Rod?", value = FALSE, onLabel = "Yes", offLabel = "No")
@@ -752,7 +732,13 @@ ui <- dashboardPage(
                                                         inputId = "rod_uiv",
                                                         label = "UIV:",
                                                         choices = c("C2", "T2", "T4", "T9", "T10", "T11", "T12", "L1", "L2"),
-                                                        selected = "T4"
+                                                        selected = "T4",
+                                                        direction = "vertical",
+                                                        checkIcon = list(
+                                                          yes = tags$i(class = "fa fa-circle", 
+                                                                       style = "color: steelblue"),
+                                                          no = tags$i(class = "fa fa-circle-o", 
+                                                                      style = "color: steelblue"))
                                                       ),
                                                       fluidRow(
                                                         column(6, div(style = "display: flex; align-items: right; height: 100%;", strong("Rod Contouring:"))),
@@ -813,11 +799,13 @@ ui <- dashboardPage(
                                   ),
                                   tableOutput(outputId = "spine_segmental_planning_df")
                                   
-                              # )
+                              )
                             )
                      )
                    )
                ),
+             conditionalPanel(
+               condition = "input.all_points_recorded == true",
                box(title = "Coordinate Data:",
                    collapsible = TRUE, collapsed = TRUE,
                    tableOutput("alignment_parameters_df"),
@@ -836,33 +824,12 @@ ui <- dashboardPage(
                    
                )
              )
-      ),
-      
-      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
-      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
-      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
-      
-      column(width = 3,
-
       )
       
-      # column(width = 8,
-      #        conditionalPanel(
-      #          condition = "input.all_points_recorded == true",
-      #          box(title = "Preop Alignment:", 
-      #              width = 12,
-      #              fluidRow(
-      #                column(width = 8, 
-      # 
-      #                ),
-      #                column(width = 4, 
-      #                       
-      #                       
-      #                )
-      #              ),
-      #          ), 
-      #        )
-      # )
+      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
+      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
+      ########## MAIN PAGE COLUMN 3 STARTS HERE: ##############
+
     )
   )
   )
@@ -1145,7 +1112,7 @@ server <- function(input, output, session) {
       instruction <- "All points recorded."
       xray_instructions_reactiveval("Completed")
       
-      print(paste(xray_instructions_reactiveval()))
+      # print(paste(xray_instructions_reactiveval()))
     }
     
     HTML("<div>", instruction, "</div>")
@@ -1154,33 +1121,7 @@ server <- function(input, output, session) {
   ############ CALIBRATION #####################
   ############ CALIBRATION #####################
   ############ CALIBRATION #####################
-  # observeEvent(list(input$xray_click, input$calibrate_button), ignoreInit = TRUE, {
-  #   calibration_length_modal_function <- function(calibration_length = 100){
-  #     modalDialog(
-  #       easyClose = TRUE,  
-  #       size = "l",  
-  #       h3("Enter Length in mm"),
-  #       fluidRow(
-  #         column(width = 2),
-  #         column(width = 6,
-  #                numericInput(inputId = "calibration_length", 
-  #                             label = "Length (mm):", 
-  #                             value = calibration_length,
-  #                             min = 10, 
-  #                             max = 1000)
-  #         )
-  #       ),
-  #       tags$script(HTML("setTimeout(function() { $('#calibration_length').focus(); }, 100);"))
-  #     )
-  #   }
-  #   
-  #   if(any(names(click_coord_reactive_list$coords) == "calibration_2")){
-  #     showModal(
-  #       calibration_length_modal_function(calibration_length = 100)
-  #     ) 
-  #   }
-  # })
-  # 
+
   
   # UI/Server snippet where the modal is shown:
   observeEvent(list(input$xray_click, input$calibrate_button), ignoreInit = TRUE, {
@@ -1192,6 +1133,8 @@ server <- function(input, output, session) {
         fluidRow(
           column(width = 2),
           column(width = 6,
+                 div(
+                   id = "calibration-input-container",
                  numericInput(
                    inputId = "calibration_length", 
                    label   = "Length (mm):", 
@@ -1199,23 +1142,45 @@ server <- function(input, output, session) {
                    min     = 10, 
                    max     = 1000
                  )
+                 )
           )
         ),
-        # JavaScript: focus cursor, then listen for Enter key and set input$calibration_enter_press
-        tags$script(HTML("
+              tags$script(HTML("
+      $(document).ready(function() {
         setTimeout(function() {
-          // focus the numericInput box
-          $('#calibration_length').focus();
-          // close the modal when Enter is pressed
-          $('#calibration_length').on('keydown', function(e) {
-            if(e.key === 'Enter') {
-              // send a signal to Shiny
-              Shiny.setInputValue('calibration_enter_press', true, {priority: 'event'});
-            }
-          });
-        }, 100);
+          // Check if the input exists
+          if ($('#calibration_length').length > 0) {
+            // focus the numericInput box
+            $('#calibration_length').focus();
+            // close the modal when Enter is pressed
+            $('#calibration_length').on('keydown', function(e) {
+              if(e.key === 'Enter') {
+                // send a signal to Shiny
+                Shiny.setInputValue('calibration_enter_press', true, {priority: 'event'});
+              }
+            });
+          } else {
+            console.error('Element #calibration_length not found');
+          }
+        }, 300); // Increased timeout to ensure DOM is fully loaded
+      });
       "))
-      )
+    )
+        # JavaScript: focus cursor, then listen for Enter key and set input$calibration_enter_press
+      #   tags$script(HTML("
+      #   setTimeout(function() {
+      #     // focus the numericInput box
+      #     $('#calibration_length').focus();
+      #     // close the modal when Enter is pressed
+      #     $('#calibration_length').on('keydown', function(e) {
+      #       if(e.key === 'Enter') {
+      #         // send a signal to Shiny
+      #         Shiny.setInputValue('calibration_enter_press', true, {priority: 'event'});
+      #       }
+      #     });
+      #   }, 100);
+      # "))
+      # )
     }
     
     # Show modal only when 'calibration_2' is present in click_coord_reactive_list$coords
@@ -2240,8 +2205,8 @@ server <- function(input, output, session) {
                                                                     size = 2,
                                                                     lineend = "round",
                                                                     linejoin = "round")
-      print(paste("Rod coord_df names: ", toString(names(spine_simulation_planning_reactive_list$rod_coord_df))))
-      print(paste("Rod X coord: ", toString(spine_simulation_planning_reactive_list$rod_coord_df$x)))
+      # print(paste("Rod coord_df names: ", toString(names(spine_simulation_planning_reactive_list$rod_coord_df))))
+      # print(paste("Rod X coord: ", toString(spine_simulation_planning_reactive_list$rod_coord_df$x)))
       
       spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
         spine_simulation_planning_reactive_list$rod_geom +
@@ -2335,8 +2300,12 @@ server <- function(input, output, session) {
       ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$y)*1.1)
       
       if(max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y) > ylimits[[2]]){
-        ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$y)*1.25)
+        ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$y)*1.2)
       }
+      # ylimits <- c(0, 800)
+      
+      # print(paste(ylimits))
+      # print(paste("max c2_tilt_normal_df", max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y)))
       
       xrange <- diff(range(spine_build_list_reactivevalues$spine_build_list$vert_coord_df$x))
       
@@ -2360,6 +2329,27 @@ server <- function(input, output, session) {
       
       femoral_head_circle_sf <- st_buffer(st_sfc(st_point(c(0, 0))), dist = fem_head_radius)
       
+      vert_labels_planned_df_pre <- enframe(spine_build_list_reactivevalues$planned_spine_list$centroid_coord_list) %>%
+        unnest_wider(col = value, names_sep = "_")
+      
+      if(nrow(vert_labels_planned_df_pre)>0){
+        vert_labels_df <- vert_labels_planned_df_pre %>%
+          select(level = name, x = value_1, y = value_2) %>%
+          filter(level %in% jh_spine_levels_factors_df$level) %>%
+          filter(level != "c2") %>%
+          mutate(level = str_to_upper(level))
+        
+      }else{
+        vert_labels_df <- enframe(spine_build_list_reactivevalues$spine_build_list$centroid_coord_list) %>%
+          unnest_wider(col = value, names_sep = "_")%>%
+          select(level = name, x = value_1, y = value_2) %>%
+          filter(level %in% jh_spine_levels_factors_df$level) %>%
+          filter(level != "c2") %>%
+          mutate(level = str_to_upper(level))
+      }
+
+      
+      
       ggplot() +
         spine_simulation_planning_reactive_list$normal_c2_tilt_geom +
         spine_simulation_planning_reactive_list$preop_geom +
@@ -2369,14 +2359,14 @@ server <- function(input, output, session) {
         spine_simulation_planning_reactive_list$l1pa_line_geom +
         spine_simulation_planning_reactive_list$t4pa_line_geom +
         spine_simulation_planning_reactive_list$c2pa_line_geom +
-        # theme_void() +
+        theme_void() +
         spine_simulation_planning_reactive_list$rod_geom +
-        theme_minimal_grid()+
-        ylim(ylimits) +
+        draw_text(text = vert_labels_df$level, x = vert_labels_df$x, y = vert_labels_df$y, size = 9, hjust = 0.5) +
+        # theme_minimal_grid()+
+        # ylim(ylimits) +
         xlim(xlimits) +
-        labs(title = "Preop & Planned Alignment") +
+        # labs(title = "Preop & Planned Alignment") +
         theme(
-          # axis.text = element_blank(),
           axis.title = element_blank(),
           plot.title = element_text(
             size = 16,
