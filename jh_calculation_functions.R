@@ -253,7 +253,29 @@ jh_calculate_pelvic_incidence_line_coordinates <- function(fem_head_center = c(0
   pi_line_coordinates_df
 }
 
-
+jh_calculate_vertebral_slope_function <-  function(vert_coord,
+                                                   spine_orientation = "left") {
+  # Compute vectors
+  v1 <- vert_coord$sa - vert_coord$sp
+  v2 <- c(mean(c(vert_coord$sp[[1]], vert_coord$sa[[1]])), vert_coord$sp[[2]]) - vert_coord$sp
+  
+  # Compute dot product and magnitudes
+  dot_product <- sum(v1 * v2)
+  mag_v1 <- sqrt(sum(v1^2))
+  mag_v2 <- sqrt(sum(v2^2))
+  
+  # Compute angle in radians
+  angle_rad <- acos(dot_product / (mag_v1 * mag_v2))
+  
+  # Convert to degrees
+  angle_deg <- angle_rad * (180 / pi)
+  
+  if(vert_coord$sp[[2]] < vert_coord$sa[[2]]){
+    angle_deg <- angle_deg*-1
+  }
+  
+  return(round(angle_deg, 1))
+}
 
 jh_calculate_vertebral_tilt_function <- function(vertebral_centroid, 
                                                  femoral_head_center = c(0,0), 

@@ -3,6 +3,9 @@ spinal_segments_labels_vector <- c('L5-S1', 'L4-L5', 'L3-L4', 'L2-L3', 'L1-L2',
                                    'T12-L1', 'T11-T12', 'T10-T11', 'T9-T10', 'T8-T9', 'T7-T8', 'T6-T7', 'T5-T6', 'T4-T5', 'T3-T4', 'T2-T3', 'T1-T2',
                                    'C7-T1', 'C6-C7', 'C5-C6', 'C4-C5', 'C3-C4', 'C2-C3', 'C1-C2')
 
+spine_level_interspace_df <- tibble(level = c('L5-S1', 'L5', 'L4-L5', 'L4', 'L3-L4', 'L3', 'L2-L3', 'L2', 'L1-L2', 'L1', 'T12-L1', 'T12', 'T11-T12', 'T11', 'T10-T11', 'T10', 'T9-T10', 'T9', 'T8-T9', 'T8', 'T7-T8', 'T7', 'T6-T7', 'T6', 'T5-T6', 'T5', 'T4-T5', 'T4', 'T3-T4', 'T3', 'T2-T3', 'T2', 'T1-T2', 'T1', 'C7-T1', 'C7', 'C6-C7', 'C6', 'C5-C6', 'C5', 'C4-C5', 'C4', 'C3-C4', 'C3', 'C2-C3', 'C2', 'C1-C2')) %>%
+  mutate(level_count = seq(from = 0.5, by = 0.5, length = nrow(.)))
+
 jh_spine_levels_factors_df <- tibble(level = c("c1", "c2", "c3", "c4", "c5", "c6", "c7", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12", "l1", "l2", "l3", "l4", "l5")) %>%
   mutate(level_label = str_to_upper(level)) %>% 
   mutate(level_tilt = paste0(level, "_tilt")) %>%
@@ -17,6 +20,7 @@ jh_spine_levels_factors_df <- tibble(level = c("c1", "c2", "c3", "c4", "c5", "c6
   mutate(interspace = paste0(level_label, "-", lead(level_label))) %>%
   mutate(interspace = if_else(interspace == "L5-NA", "L5-S1", interspace)) %>%
   mutate(interspace = fct_inorder(interspace))
+
 
 # Define the labels for both modes
 get_spine_labels <- function(all_centroids = FALSE) {
@@ -372,7 +376,6 @@ generate_spine_level_controls <- function(spine_level) {
     ),
   )
   
-
 }
 
 update_spine_segmental_planning_df_function <- function(spine_segmental_planning_df,
@@ -411,13 +414,33 @@ update_spine_segmental_planning_table_observe_button_function <- function(spine_
 
 
 
-jh_construct_rod_coordinates_function <- function(planned_spine_coord_df, uiv = "T4", number_of_knots = 10){
+jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
+                                                  uiv = "T4", 
+                                                  liv = "Pelvis",
+                                                  number_of_knots = 10){
   
   spine_coord_for_rod_list <- jh_convert_spine_coord_df_to_lists_function(planned_spine_coord_df)
   
-  inferior_rod_point <- jh_get_point_along_line_function(coord_a = spine_coord_for_rod_list$l5$ip, 
-                                                         coord_b = spine_coord_for_rod_list$sacrum$sp, 
-                                                         percent_a_to_b = 10)
+  # print("got to here in rod function")
+
+  if(str_to_lower(liv) == "pelvis"){
+    inferior_rod_point <- jh_get_point_along_line_function(coord_a = spine_coord_for_rod_list$l5$ip, 
+                                                           coord_b = spine_coord_for_rod_list$sacrum$sp, 
+                                                           percent_a_to_b = 10)
+    
+    # print("got to pelvis in rod function")
+  }else if(str_to_lower(liv) == "s1" | str_to_lower(liv) == "sacrum"){
+    
+    inferior_rod_point <- jh_get_point_along_line_function(coord_a = spine_coord_for_rod_list$l5$ip, 
+                                                           coord_b = spine_coord_for_rod_list$sacrum$sp, 
+                                                           percent_a_to_b = 5)
+    
+    # print("got to inf rod point in non-pelvis liv function")
+  }else{
+    inferior_rod_point <-  spine_coord_for_rod_list[[which(names(spine_coord_for_rod_list) == str_to_lower(liv))]]$ip
+  }
+  
+  
   
   superior_rod_point <-  spine_coord_for_rod_list[[which(names(spine_coord_for_rod_list) == str_to_lower(uiv)) + 1]]$ip
   
@@ -453,21 +476,6 @@ jh_construct_rod_coordinates_function <- function(planned_spine_coord_df, uiv = 
     mutate(y = zoo::na.spline(y)) 
   
   return(smoothed_rod_df)
-  
-  
-  # jh_smooth_rod_coords <- function(rod_coord_df, n_points = 500) {
-  #   dist_vals <- sqrt(diff(rod_coord_df$x)^2 + diff(rod_coord_df$y)^2)
-  #   t_vals <- c(0, cumsum(dist_vals))
-  #   spx <- smooth.spline(t_vals, rod_coord_df$x)
-  #   spy <- smooth.spline(t_vals, rod_coord_df$y)
-  #   t_seq <- seq(from = min(t_vals), to = max(t_vals), length.out = n_points)
-  #   tibble(
-  #     x = predict(spx, t_seq)$y,
-  #     y = predict(spy, t_seq)$y
-  #   )
-  # }
-  
-  # smoothed_rod_df <- jh_smooth_rod_coords(rod_coord_df = rod_coord_df, n_points = 500)
   
 }
 

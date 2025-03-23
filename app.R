@@ -275,8 +275,6 @@ ui <- dashboardPage(
       
       column(width = 4, 
              box(width = 12,
-                 # conditionalPanel(
-                 #   condition = "input.xray_file_uploaded == true",
                    fluidRow(
                      class = "d-flex justify-content-center",  # Center content horizontally
                      tags$div(
@@ -317,7 +315,7 @@ ui <- dashboardPage(
                               tags$img(
                                 id = "uploadedImage",
                                 src = "",
-                                style = "position: absolute; top: 0; left: 0; cursor: crosshair;"
+                                style = "position: absolute; top: 0; left: 0; cursor: crosshair"
                               )
                             ),
                             # tags$script(src = "https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"),
@@ -509,7 +507,7 @@ ui <- dashboardPage(
                               tags$img(
                                 id = "uploadedImagePlot",
                                 src = "",
-                                style = "position: absolute; top: 0; left: 0; cursor: crosshair;"
+                                style = "position: absolute; top: 0; left: 0; cursor: crosshair"
                               )
                             ),
                             # tags$script(src = "https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"),
@@ -542,23 +540,37 @@ ui <- dashboardPage(
 
   let imageHeight = null; // We'll determine the height once the image is loaded
 
-  Shiny.addCustomMessageHandler('load-plot-image', function(data) {
+Shiny.addCustomMessageHandler('load-plot-image', function(data) {
     var img = document.getElementById('uploadedImagePlot');
     img.src = data.src;
 
-    // Once the image loads, set the natural height
     img.onload = function() {
-      imageHeight = img.naturalHeight;
-      // Reset scaling and position when new image is loaded
-      scale = 1;
-      panX = 0;
-      panY = 0;
-      updateImageTransform();
+        let container = $('#image-plot-container');
+        let containerWidth = container.width();
+        let containerHeight = container.height();
 
-      // Remove existing dots when a new image is loaded
-      $('.dot').remove();
+        let imageWidth = img.naturalWidth;
+        let imageHeight = img.naturalHeight;
+
+        // Compute the scale to fit the full image height within the container
+        let scaleX = containerWidth / imageWidth;
+        let scaleY = containerHeight / imageHeight;
+        let scale = Math.min(scaleX, scaleY);  // Maintain aspect ratio
+
+        // Center the image properly
+        let panX = (containerWidth - (imageWidth * scale)) / 2;
+        let panY = (containerHeight - (imageHeight * scale)) / 2;
+
+        // Apply transformations
+        $('#uploadedImagePlot').css({
+            'transform-origin': 'top left',
+            'transform': `translate(${panX}px, ${panY}px) scale(${scale})`
+        });
+
+        // Clear any existing dots since this is the final image
+        $('.dot').remove();
     };
-  });
+});
 
 
   // Handle zoom with the mouse wheel
@@ -640,8 +652,6 @@ ui <- dashboardPage(
                      )
                    )
                  ),
-                 # conditionalPanel(
-                 #   condition = "input.xray_file_uploaded == true",
                    br(),
                    fluidRow(
                      column(
@@ -728,17 +738,38 @@ ui <- dashboardPage(
                                        switchInput(inputId = "add_rod", label = "Add Rod?", value = FALSE, onLabel = "Yes", offLabel = "No")
                                      ),
                                      conditionalPanel(condition = "input.add_rod == true",
-                                                      radioGroupButtons(
-                                                        inputId = "rod_uiv",
-                                                        label = "UIV:",
-                                                        choices = c("C2", "T2", "T4", "T9", "T10", "T11", "T12", "L1", "L2"),
-                                                        selected = "T4",
-                                                        direction = "vertical",
-                                                        checkIcon = list(
-                                                          yes = tags$i(class = "fa fa-circle", 
-                                                                       style = "color: steelblue"),
-                                                          no = tags$i(class = "fa fa-circle-o", 
-                                                                      style = "color: steelblue"))
+                                                      fluidRow(
+                                                        pickerInput(
+                                                          inputId = "rod_uiv",
+                                                          label = "UIV:", 
+                                                          choices = c("C2", "C3", "C4", "C5", "C6", "C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4"),
+                                                          selected = "T4",
+                                                          multiple = FALSE,
+                                                          options = pickerOptions(container = "body"), 
+                                                          width = "100%"
+                                                        ),
+                                                        pickerInput(
+                                                                 inputId = "rod_liv",
+                                                                 label = "LIV:", 
+                                                                 choices = c("C6", "C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4", "L5", "S1", "Pelvis"),
+                                                                 selected = "Pelvis",
+                                                                 multiple = FALSE,
+                                                                 options = pickerOptions(container = "body"), 
+                                                                 width = "100%"
+                                                               )
+                                                      #          radioGroupButtons(
+                                                      #   inputId = "rod_uiv",
+                                                      #   size = "sm",
+                                                      #   label = "UIV:",
+                                                      #   choices = c("C2", "T2", "T3", "T4","T5", "T9", "T10", "T11", "T12", "L1", "L2"),
+                                                      #   selected = "T4",
+                                                      #   direction = "vertical",
+                                                      #   checkIcon = list(
+                                                      #     yes = tags$i(class = "fa fa-circle", 
+                                                      #                  style = "color: steelblue"),
+                                                      #     no = tags$i(class = "fa fa-circle-o", 
+                                                      #                 style = "color: steelblue"))
+                                                      # ),
                                                       ),
                                                       fluidRow(
                                                         column(6, div(style = "display: flex; align-items: right; height: 100%;", strong("Rod Contouring:"))),
@@ -767,6 +798,19 @@ ui <- dashboardPage(
                                       tags$table(width = "100%",
                                                  map(.x = jh_spine_levels_factors_df$interspace[1:7], 
                                                      .f = ~ generate_spine_level_controls(spine_level = .x))
+                                      ),
+                                      fluidRow(
+                                        column(width = 6, 
+                                               pickerInput(
+                                                 inputId = "cervical_pso",
+                                                 label = "Cervical PSO/VCR", 
+                                                 choices = c("C3", "C4", "C5", "C6", "C7"),
+                                                 multiple = TRUE,
+                                                 options = pickerOptions(container = "body"), 
+                                                 width = "100%"
+                                               )),
+                                        column(width = 6,
+                                        )
                                       )
                                   ),
                                   box(width = 12,
@@ -777,6 +821,19 @@ ui <- dashboardPage(
                                       tags$table(width = "100%",
                                                  map(.x = jh_spine_levels_factors_df$interspace[8:19],
                                                      .f = ~ generate_spine_level_controls(spine_level = .x))
+                                      ),
+                                      fluidRow(
+                                        column(width = 6, 
+                                               pickerInput(
+                                                 inputId = "thoracic_pso",
+                                                 label = "Thoracic PSO/VCR", 
+                                                 choices = c("T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"),
+                                                 multiple = TRUE,
+                                                 options = pickerOptions(container = "body"), 
+                                                 width = "100%"
+                                               )),
+                                        column(width = 6,
+                                        )
                                       )
                                 ),
                                   box(width = 12,title = "Lumbar", 
@@ -786,7 +843,22 @@ ui <- dashboardPage(
                                       tags$table(width = "100%",
                                                  map(.x = jh_spine_levels_factors_df$interspace[20:24], 
                                                      .f = ~ generate_spine_level_controls(spine_level = .x))
+                                      ),
+                                      fluidRow(
+                                        column(width = 6, 
+                                               pickerInput(
+                                        inputId = "lumbar_pso",
+                                        label = "Lumbar PSO", 
+                                        choices = c("L1", "L2", "L3", "L4", "L5"),
+                                        multiple = TRUE,
+                                        options = pickerOptions(container = "body"), 
+                                        width = "100%"
+                                      )),
+                                      column(width = 6,
+                                             uiOutput("lumbar_pso_inputs") # This will hold dynamic numericInputs
+                                             )
                                       )
+                                      
                                 ),
                                   actionBttn(
                                     size = "md",
@@ -797,7 +869,9 @@ ui <- dashboardPage(
                                     color = "danger",
                                     icon = icon("arrow-rotate-left")
                                   ),
-                                  tableOutput(outputId = "spine_segmental_planning_df")
+                                  tableOutput(outputId = "spine_segmental_planning_df"),
+                              br(), 
+                              tableOutput(outputId = "spine_segmental_planning_pso_df")
                                   
                               )
                             )
@@ -964,10 +1038,8 @@ server <- function(input, output, session) {
   
   
   
-  # observeEvent(input$image, {
   observe({
     req(input$image)
-    # if(xray_instructions_reactiveval() == "Completed"){
     if(length(spine_build_list_reactivevalues$spine_build_list)>0){
       req(input$image)  # Ensure there's an image uploaded
       
@@ -993,11 +1065,10 @@ server <- function(input, output, session) {
       # Encode the scaled image to base64
       img_base64 <- base64enc::dataURI(file = temp_file, mime = "image/jpeg")
       
-      # print(paste("Sending load-plot-image message", "Xray height is ", xray_height, "Width is ", xray_width))  # Debugging log
+      print(paste("Sending load-plot-image message", "Xray height is ", xray_height, "Width is ", xray_width))  # Debugging log
       session$sendCustomMessage('load-plot-image', list(src = img_base64)) 
       
     }else{
-      # img <- image_read(input$image$datapath)
       img_scaled <- image_scale(image_read(input$image$datapath), "400x")  # Scale to 400px width
       
       # Write the scaled image to a temporary file
@@ -2071,7 +2142,8 @@ server <- function(input, output, session) {
       spine_interspace = rev(jh_spine_levels_factors_df$interspace),
       adjustment = rep(0, length(jh_spine_levels_factors_df$interspace))
       
-    )
+    ), 
+    pso_df = tibble()
   )
   
   map(.x = jh_spine_levels_factors_df$interspace, 
@@ -2081,9 +2153,28 @@ server <- function(input, output, session) {
   
   # Optional: Display the updated table in UI for debugging
   output$spine_segmental_planning_df <- renderTable({
-    spine_segmental_planning_df$df %>%
-      filter(adjustment != 0)
+    
+    adjustment_df <- spine_segmental_planning_df$df %>%
+      filter(adjustment != 0) %>%
+      select("Level" = spine_interspace,
+             "Adjustment" = adjustment)
+
+    adjustment_df
+    
+    
   })
+  
+  output$spine_segmental_planning_pso_df <- renderTable({
+    
+    if(nrow(spine_segmental_planning_df$pso_df)>0){
+      spine_segmental_planning_df$pso_df %>%
+      select("PSO Level" = level, "Angle" = adjustment)
+    }
+    
+    
+    
+  })
+  
   
   observeEvent(input$segmental_planning_reset, ignoreInit = TRUE, {
     spine_segmental_planning_df$df <- spine_segmental_planning_df$df %>%
@@ -2095,6 +2186,68 @@ server <- function(input, output, session) {
     
   })
   
+  output$lumbar_pso_inputs <- renderUI({
+    req(input$lumbar_pso)  # Ensure there's a selection before rendering
+    
+    # Generate numericInputs dynamically using purrr::map
+    map(input$lumbar_pso, ~ numericInput(
+      inputId = paste0(tolower(.x), "_pso_value"), 
+      label = paste(.x, "PSO Value"), 
+      value = 30, 
+      min = 0, 
+      max = 50
+    ))
+  })
+  
+  ####### PSO LIST ###########
+  # observeEvent(list(input$cervical_pso, input$thoracic_pso, input$lumbar_pso), ignoreInit = TRUE, {
+  # 
+  #   pso_vector <- c(input$lumbar_pso, input$thoracic_pso, input$cervical_pso)
+  #   
+  #   # if(length(pso_vector)>0){
+  #   #   pso_list <- setNames(as.list(rep(30, length(pso_vector))), pso_vector)
+  #   #   
+  #   #   spine_segmental_planning_df$pso_df <- enframe(pso_list) %>%
+  #   #     unnest() %>%
+  #   #     select(level = name, adjustment = value)
+  #   # # }
+  #   # if(length(pso_vector) > 0) {
+  #   #   # Extract corresponding numeric input values dynamically
+  #   #   pso_values <- map(pso_vector, ~ input[[paste0(tolower(.x), "_pso_value")]] %||% 30)
+  #   #   
+  #   #   # Create named list with actual values
+  #   #   pso_list <- setNames(as.list(pso_values), pso_vector)
+  #   #   
+  #   #   spine_segmental_planning_df$pso_df <- enframe(pso_list) %>%
+  #   #     unnest() %>%
+  #   #     select(level = name, adjustment = value)
+  #   # }
+  #   # Dynamically observe changes in numeric inputs
+  # 
+  #   
+  # })
+  # Reactive to collect numericInput values dynamically
+  pso_values <- reactive({
+    pso_vector <- c(input$lumbar_pso, input$thoracic_pso, input$cervical_pso)
+    
+    if (length(pso_vector) == 0) return(NULL)
+    
+    # Extract values dynamically from input
+    setNames(
+      map(pso_vector, ~ input[[paste0(tolower(.x), "_pso_value")]] %||% 30), 
+      pso_vector
+    )
+  })
+  
+  # Observe both changes in selections and numeric input values
+  observe({
+    req(pso_values())  # Ensure there's data before updating
+    
+    spine_segmental_planning_df$pso_df <- enframe(pso_values()) %>%
+      unnest() %>%
+      select(level = name, adjustment = value)
+  })
+
   
   spine_simulation_planning_reactive_list <- reactiveValues(preop_geom = NULL, 
                                                             planned_geom = NULL, 
@@ -2119,7 +2272,7 @@ server <- function(input, output, session) {
       
       preop_c2_tilt <- preop_c2pa - preop_pelvic_tilt
       
-      if(any(spine_segmental_planning_df$df$adjustment != 0)){
+      if(any(spine_segmental_planning_df$df$adjustment != 0) | nrow(spine_segmental_planning_df$pso_df)>0){
         preop_spine_list_sf <- jh_construct_spine_geom_sf_function(vert_coord_list = spine_build_list_reactivevalues$spine_build_list$vert_coord_list, 
                                                                    baseline_spine = TRUE, fade_baseline_spine = TRUE)
       }else{
@@ -2137,12 +2290,16 @@ server <- function(input, output, session) {
     }
   })
   
-  observeEvent(spine_segmental_planning_df$df, ignoreInit = TRUE, {
+  observeEvent(list(spine_segmental_planning_df$df, spine_segmental_planning_df$pso_df), ignoreInit = TRUE, {
       if(length(spine_build_list_reactivevalues$spine_build_list)>0){
 
-        if(any(spine_segmental_planning_df$df$adjustment != 0)){
+        if(any(spine_segmental_planning_df$df$adjustment != 0) | nrow(spine_segmental_planning_df$pso_df)>0){
           
-          spine_build_list_reactivevalues$planned_spine_list <-  jh_construct_adjusted_spine_list_function(sa_adjustment_df = spine_segmental_planning_df$df,
+          pso_adjustment_list <- as.list(spine_segmental_planning_df$pso_df$adjustment)
+          names(pso_adjustment_list) <- str_to_lower(spine_segmental_planning_df$pso_df$level)
+          
+          spine_build_list_reactivevalues$planned_spine_list <-  jh_construct_adjusted_spine_list_function(segment_angle_adjustment_df = spine_segmental_planning_df$df,
+                                                                                                           pso_list = pso_adjustment_list,
                                                                                                            spine_list = spine_build_list_reactivevalues$spine_build_list,
                                                                                                            spine_orientation = spine_orientation(),
                                                                                                            adjust_for_pt_change = TRUE)
@@ -2193,11 +2350,15 @@ server <- function(input, output, session) {
     
   })
   
-  observeEvent(list(input$add_rod, input$rod_uiv, input$rod_knots), ignoreInit = TRUE, {
+  observeEvent(list(input$add_rod, input$rod_uiv, input$rod_liv, input$rod_knots), ignoreInit = TRUE, {
     if(input$add_rod){
+      print("reacted correctly")
       spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(planned_spine_coord_df = spine_build_list_reactivevalues$planned_spine_list$vert_coord_df,
                                                                                                     uiv = input$rod_uiv, 
+                                                                                                    liv = input$rod_liv,
                                                                                                     number_of_knots = input$rod_knots)
+      
+      print("completed the function")
       
       spine_simulation_planning_reactive_list$rod_geom <- geom_path(data = spine_simulation_planning_reactive_list$rod_coord_df,
                                                                     aes(x = x, y = y),
@@ -2205,6 +2366,7 @@ server <- function(input, output, session) {
                                                                     size = 2,
                                                                     lineend = "round",
                                                                     linejoin = "round")
+      
       # print(paste("Rod coord_df names: ", toString(names(spine_simulation_planning_reactive_list$rod_coord_df))))
       # print(paste("Rod X coord: ", toString(spine_simulation_planning_reactive_list$rod_coord_df$x)))
       
