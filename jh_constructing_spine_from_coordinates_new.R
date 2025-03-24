@@ -187,7 +187,17 @@ jh_construct_spine_coord_df_from_centroids_function <- function(s1_posterior_sup
                                                                 s1_anterior_superior = NULL, 
                                                                 centroid_df = tibble(),
                                                                 femoral_head_center = c(0,0),
+                                                                calibration_modifier = 1,
                                                                 spine_orientation = "left"){
+  
+  if(calibration_modifier != 1){
+    femoral_head_center <- femoral_head_center*calibration_modifier
+    s1_anterior_superior <- s1_anterior_superior*calibration_modifier
+    s1_posterior_superior <- s1_posterior_superior*calibration_modifier
+    centroid_df <- centroid_df %>%
+      mutate(x = x*calibration_modifier, 
+             y = y*calibration_modifier)
+  }
   
   ## adjust all coordinates so that fem heads are at 0,0
   s1_posterior_superior <- s1_posterior_superior - femoral_head_center 

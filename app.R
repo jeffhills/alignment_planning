@@ -1237,21 +1237,7 @@ server <- function(input, output, session) {
       });
       "))
     )
-        # JavaScript: focus cursor, then listen for Enter key and set input$calibration_enter_press
-      #   tags$script(HTML("
-      #   setTimeout(function() {
-      #     // focus the numericInput box
-      #     $('#calibration_length').focus();
-      #     // close the modal when Enter is pressed
-      #     $('#calibration_length').on('keydown', function(e) {
-      #       if(e.key === 'Enter') {
-      #         // send a signal to Shiny
-      #         Shiny.setInputValue('calibration_enter_press', true, {priority: 'event'});
-      #       }
-      #     });
-      #   }, 100);
-      # "))
-      # )
+
     }
     
     # Show modal only when 'calibration_2' is present in click_coord_reactive_list$coords
@@ -1814,34 +1800,25 @@ server <- function(input, output, session) {
 
   observe({
     spine_build_list <- list()
-    # if(any(names(click_coord_reactive_list$coords) == "c2_centroid")){
-    # if(xray_instructions_reactiveval() == "Completed"){
-    
     if(isTruthy(calibration_list$calibration_modifier)){
-      # print("got to here")
       if(calibration_list$calibration_modifier != 1){
-        # print("got to here2")
-        # spine_build_list <- jh_build_spine_from_coordinates_function(femoral_head_center = c(click_coord_reactive_list$coords$fem_head_center$x, click_coord_reactive_list$coords$fem_head_center$y),
-        #                                                              s1_anterior_superior = c(click_coord_reactive_list$coords$s1_anterior_superior$x, click_coord_reactive_list$coords$s1_anterior_superior$y),
-        #                                                              s1_posterior_superior = c(click_coord_reactive_list$coords$s1_posterior_superior$x, click_coord_reactive_list$coords$s1_posterior_superior$y),
-        #                                                              centroid_df = xray_centroid_coordinates_reactive_df(),
-        #                                                              spine_facing = spine_orientation(),
-        #                                                              calibration_modifier = calibration_list$calibration_modifier,
-        #                                                              center_femoral_heads = TRUE
-        # )
+        # femoral_head_center <- femoral_head_center*calibration_modifier
+        # s1_anterior_superior <- s1_anterior_superior*calibration_modifier
+        # s1_posterior_superior <- s1_posterior_superior*calibration_modifier
+        # centroid_df <- centroid_df %>%
+        #   mutate(x = x*calibration_modifier,
+        #          y = y*calibration_modifier)
         
         fem_head_center_original <- c(click_coord_reactive_list$coords$fem_head_center$x, click_coord_reactive_list$coords$fem_head_center$y)
         s1_anterior_superior_original <- c(click_coord_reactive_list$coords$s1_anterior_superior$x, click_coord_reactive_list$coords$s1_anterior_superior$y)
         s1_posterior_superior_original <- c(click_coord_reactive_list$coords$s1_posterior_superior$x, click_coord_reactive_list$coords$s1_posterior_superior$y)
-        
+
         spine_build_list <- jh_construct_spine_coord_df_from_centroids_function(s1_posterior_superior = s1_posterior_superior_original, 
                                                                          s1_anterior_superior = s1_anterior_superior_original, 
                                                                          centroid_df = xray_centroid_coordinates_reactive_df(),
                                                                          femoral_head_center = fem_head_center_original,
+                                                                         calibration_modifier = calibration_list$calibration_modifier,
                                                                          spine_orientation = spine_orientation())
-        
-        # print(calibration_list$calibration_modifier)
-        
         
         
       }
@@ -2367,12 +2344,61 @@ server <- function(input, output, session) {
                                                                     lineend = "round",
                                                                     linejoin = "round")
       
-      # print(paste("Rod coord_df names: ", toString(names(spine_simulation_planning_reactive_list$rod_coord_df))))
-      # print(paste("Rod X coord: ", toString(spine_simulation_planning_reactive_list$rod_coord_df$x)))
       
       spine_simulation_planning_reactive_list$rod_plot <- ggplot() +
         spine_simulation_planning_reactive_list$rod_geom +
         theme_minimal_grid()
+      
+      # ############## generate rod plot for printing ###################
+      # 
+      # spine_levels <- c("pelvis", "sacrum", "l5", "l4", "l3", "l2", "l1",
+      #                   "t12", "t11", "t10", "t9", "t8", "t7", "t6", "t5", "t4", "t3", "t2", "t1",
+      #                   "c7", "c6", "c5", "c4", "c3", "c2", "c1")
+      # 
+      # # Ensure spine_level is a factor with the correct order
+      # instrumented_vert_centered_df <- adjusted_spine_list$vert_coord_df %>%
+      #   mutate(spine_level = factor(spine_level, levels = spine_levels, ordered = TRUE)) %>%
+      #   group_by(spine_level) %>%
+      #   filter(spine_level >= str_to_lower(liv) & spine_level <= str_to_lower(uiv)) %>%
+      #   mutate(x = x - test_rod$x[[1]])%>%
+      #   mutate(y = y - test_rod$y[[1]])
+      # 
+      # rod_coord_centered_df <- spine_simulation_planning_reactive_list$rod_coord_df %>%
+      #   mutate(x = x - spine_simulation_planning_reactive_list$rod_coord_df$x[[1]])%>%
+      #   mutate(y = y - spine_simulation_planning_reactive_list$rod_coord_df$y[[1]])
+      # 
+      # spine_simulation_planning_reactive_list$rod_coord_centered_for_template_df <- rod_coord_centered_df
+      # 
+      # x_range <- range(rod_coord_centered_df$x)
+      # if(diff(x_range) > 49){
+      #   x_grid_breaks <- 50
+      # }else{
+      #   x_grid_breaks <- 25
+      # }
+      # 
+      # if(diff(range(rod_coord_centered_df$y)) > 199){
+      #   y_grid_breaks <- 100
+      # }else{
+      #   y_grid_breaks <- 50
+      # }
+      # 
+      # spine_simulation_planning_reactive_list$rod_plot_template <- ggplot() +
+      #   geom_path(data = rod_coord_centered_df,
+      #             aes(x = x, y = y),
+      #             color = "blue",
+      #             size = 2,
+      #             lineend = "round",
+      #             linejoin = "round") +
+      #   jh_theme_function(axis_text_size = 9, axis_title_size = 10) +
+      #   coord_fixed() +
+      #   ylab("mm") + 
+      #   xlab("mm") +
+      #   scale_x_continuous(breaks = seq(floor(x_range[1] / x_grid_breaks) * x_grid_breaks, ceiling(x_range[2] / x_grid_breaks) * x_grid_breaks, by = x_grid_breaks)) +
+      #   scale_y_continuous(breaks = seq(0, max(rod_coord_centered_df$y), by = y_grid_breaks)) +
+      #   theme(
+      #     panel.grid.major = element_line(linetype = "dashed", color = "grey50"),
+      #     panel.grid.minor = element_blank()
+      #   )
       
     }else{
       spine_simulation_planning_reactive_list$rod_geom <- NULL
@@ -2544,89 +2570,135 @@ server <- function(input, output, session) {
     
   })
   
-  # output$preop_spine_simulation_plot <- renderPlot({
-  #   # spine_simulation_planning_plot()
-  #   
-  #   
-  #   if(length(spine_build_list_reactivevalues$spine_build_list)>0){
-  #     ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.1)
-  #     
-  #     if(max(spine_simulation_planning_reactive_list$c2_tilt_normal_df$y) > ylimits[[2]]){
-  #       ylimits <- c(0, max(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$y)*1.25)
-  #     }
-  #     
-  #     xlimits <- range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x) + c(-1, 1) * 0.2 * diff(range(spine_build_list_reactivevalues$spine_build_list$spine_coord_df$x))
-  #     
-  #     if(input$add_rod){
-  #       if(max(xlimits) < max(spine_simulation_planning_reactive_list$rod_coord_df$x)){
-  #         xlimits <- c(xlimits[[1]], max(spine_simulation_planning_reactive_list$rod_coord_df$x))
-  #       }
-  #       if(min(xlimits) > min(spine_simulation_planning_reactive_list$rod_coord_df$x)){
-  #         xlimits <- c(xlimits[[1]], min(spine_simulation_planning_reactive_list$rod_coord_df$x))
-  #       }
-  #     }
-  # 
-  #     ggplot() +
-  #       spine_simulation_planning_reactive_list$normal_c2_tilt_geom +
-  #       spine_simulation_planning_reactive_list$preop_geom +
-  #       spine_simulation_planning_reactive_list$planned_geom +
-  #       geom_sf(data = spine_build_list_reactivevalues$spine_build_list$fem_head_sf, 
-  #               fill = "grey90") +
-  #       geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$l1pa, 
-  #               color = "blue", linewidth = 1)+
-  #       geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$t4pa, 
-  #               color = "purple", linewidth = 1) +
-  #       geom_sf(data = spine_simulation_planning_reactive_list$plotting_lines_list$c2pa, 
-  #               color = "darkgreen") +
-  #       # theme_void() +
-  #       spine_simulation_planning_reactive_list$rod_geom +
-  #       theme_minimal_grid()+
-  #       ylim(ylimits) +
-  #       xlim(xlimits) +
-  #       labs(title = "Preop & Planned Alignment") +
-  #       theme(
-  #         # axis.text = element_blank(),
-  #         axis.title = element_blank(),
-  #         plot.title = element_text(
-  #           size = 16,
-  #           hjust = 0.5,
-  #           vjust = -0.5,
-  #           face = "bold.italic"
-  #         ),
-  #         plot.background = element_rect(fill = "transparent", colour = NA),
-  #         panel.background = element_rect(fill = "transparent", colour = NA)
-  #       )
-  #   }
-  #   
-  #   
-  # })
-  
 
   output$download_rod_template <- downloadHandler(
-    
+
     filename = function() {
       "rod_plot_to_scale.pdf"
     },
-    
+
     content = function(file) {
       # Get the reactive plot
+
+      ############## generate rod plot for printing ###################
+
+      spine_levels <- c("pelvis", "sacrum", "l5", "l4", "l3", "l2", "l1",
+                        "t12", "t11", "t10", "t9", "t8", "t7", "t6", "t5", "t4", "t3", "t2", "t1",
+                        "c7", "c6", "c5", "c4", "c3", "c2", "c1")
+
+      # Ensure spine_level is a factor with the correct order
+      instrumented_vert_centered_df <- spine_build_list_reactivevalues$planned_spine_list$vert_coord_df  %>%
+        mutate(spine_level = factor(spine_level, levels = spine_levels, ordered = TRUE)) %>%
+        group_by(spine_level) %>%
+        filter(spine_level >= str_to_lower(input$rod_liv) & spine_level <= str_to_lower(input$rod_uiv)) %>%
+        mutate(x = x - spine_simulation_planning_reactive_list$rod_coord_df$x[[1]])%>%
+        mutate(y = y - spine_simulation_planning_reactive_list$rod_coord_df$y[[1]])
+
+      rod_coord_centered_df <- spine_simulation_planning_reactive_list$rod_coord_df %>%
+        mutate(x = x - spine_simulation_planning_reactive_list$rod_coord_df$x[[1]])%>%
+        mutate(y = y - spine_simulation_planning_reactive_list$rod_coord_df$y[[1]])
+
+      # # Calculate the actual plot range after centering
+      x_range_centered <- range(c(rod_coord_centered_df$x, instrumented_vert_centered_df$x), na.rm = TRUE)
+      y_range_centered <- range(c(rod_coord_centered_df$y, instrumented_vert_centered_df$y), na.rm = TRUE)
       
-      # Determine plot dimensions in mm
-      plot_width_mm <- max(spine_simulation_planning_reactive_list$rod_coord_df$x) - min(spine_simulation_planning_reactive_list$rod_coord_df$x)  # Width in mm
-      plot_height_mm <- max(spine_simulation_planning_reactive_list$rod_coord_df$y) - min(spine_simulation_planning_reactive_list$rod_coord_df$y) # Height in mm
+      y_grid_breaks <- 50
       
+      y_grid_max <- ceiling(y_range_centered[[2]]/ y_grid_breaks) * y_grid_breaks
+      y_grid_min <- floor(y_range_centered[[1]]/ y_grid_breaks) * y_grid_breaks
+      x_grid_max <- ceiling(x_range_centered[[2]]/ 20) * 20
+      x_grid_min <- floor(x_range_centered[[1]]/ 20) * 20
+
+      grid_corners_df <- expand_grid(x = c(x_grid_min, x_grid_max), y = c(y_grid_min, y_grid_max))
+      
+      y_gridline_tibble_df <- tibble(x_min = x_grid_min, x_max = x_grid_max, y = seq(from = y_grid_min, to = y_grid_max, by = 50))
+
+      x_gridline_tibble_df <- tibble(x = seq(from = x_grid_min, to = x_grid_max, by = 40), y_min = y_grid_min, y_max = y_grid_min + 25)%>%
+        slice(-1)
+      
+      rod_plot_template <- ggplot() +
+        geom_polygon(data = instrumented_vert_centered_df, aes(x = x, y = y, group = spine_level), color = "grey50", fill = NA, alpha = 0.3) +
+        geom_segment(data = y_gridline_tibble_df, aes(x = x_min, xend = x_max, y = y, yend = y), color = "grey75", linetype = "dashed")+ 
+        draw_text(text = paste0(as.character(y_gridline_tibble_df$y), "mm"), x = y_gridline_tibble_df$x_min + 20, y = y_gridline_tibble_df$y, size = 7) +
+        geom_segment(data = x_gridline_tibble_df, aes(x = x, xend = x, y = y_min, yend = y_max), color = "grey75", linetype = "dashed")+ 
+        draw_text(text = paste0(as.character(x_gridline_tibble_df$x), "mm"),
+                  x = x_gridline_tibble_df$x, y = x_gridline_tibble_df$y_max, size = 7) +
+        geom_path(data = rod_coord_centered_df,
+                  aes(x = x, y = y),
+                  color = "blue",
+                  size = 2,
+                  lineend = "round",
+                  linejoin = "round") +
+        geom_point(data = grid_corners_df, aes(x =x, y = y), color = "red") +
+        coord_fixed(expand = FALSE, xlim = c(x_grid_min, x_grid_max), ylim = c(y_grid_min, y_grid_max)) +
+        theme_void()
+      
+        # coord_fixed(expand = FALSE, xlim = x_range_centered, ylim = y_range_centered) +  # Explicitly set x/y limits
+        # ylab("mm") +
+        # xlab("mm") +
+        # scale_x_continuous(expand = c(0, 0),
+        #                    breaks = seq(floor(x_range_centered[1] / x_grid_breaks) * x_grid_breaks, ceiling(x_range_centered[2] / x_grid_breaks) * x_grid_breaks, by = x_grid_breaks)) +
+        # scale_y_continuous(expand = c(0, 0),
+        #                    breaks = seq(floor(y_range_centered[1] / y_grid_breaks) * y_grid_breaks,
+        #                                 ceiling(y_range_centered[2] / y_grid_breaks) * y_grid_breaks, by = y_grid_breaks)) +
+        # theme(
+        #   panel.grid.major = element_line(linetype = "dashed", color = "grey50"),
+        #   panel.grid.minor = element_blank(),
+        #   plot.margin = margin(0, 0, 0, 0, "mm"),
+        #   panel.spacing = unit(0, "mm"),
+        #   axis.title = element_text(size = 10),
+        #   axis.text = element_text(size = 9),
+        #   panel.background = element_blank()
+        # )
+# 
+#       plot_width_mm <- diff(x_range_centered)  # Width in mm
+#       plot_height_mm <- diff(y_range_centered) # Height in mm
+
+      plot_width_mm <- diff(c(x_grid_min, x_grid_max))  # Width in mm
+      plot_height_mm <- diff(c(y_grid_min, y_grid_max)) # Height in mm
+      
+      # Convert mm to inches (1 inch = 25.4 mm)
+      plot_width_in <- plot_width_mm / 25.4
+      plot_height_in <- plot_height_mm / 25.4
+
       # Save as PDF with exact dimensions
-      ggsave(file, 
-             plot = spine_simulation_planning_reactive_list$rod_plot + theme_void(), 
-             device = cairo_pdf, 
-             width = plot_width_mm / 10,  # Convert mm to cm
-             height = plot_height_mm / 10, 
-             units = "cm", 
-             dpi = 300)
-      
+      ggsave(file,
+             plot = rod_plot_template,
+             device = cairo_pdf,
+             width = plot_width_in,  # Convert mm to cm
+             height = plot_height_in,
+             units = "in",
+             dpi = 300,
+             limitsize = FALSE)
+
     }
   )
   
+  # 
+  # output$download_rod_template <- downloadHandler(
+  #   
+  #   filename = function() {
+  #     "rod_plot_to_scale.pdf"
+  #   },
+  #   
+  #   content = function(file) {
+  #     # Get the reactive plot
+  #     
+  #     # Determine plot dimensions in mm
+  #     plot_width_mm <- max(spine_simulation_planning_reactive_list$rod_coord_df$x) - min(spine_simulation_planning_reactive_list$rod_coord_df$x)  # Width in mm
+  #     plot_height_mm <- max(spine_simulation_planning_reactive_list$rod_coord_df$y) - min(spine_simulation_planning_reactive_list$rod_coord_df$y) # Height in mm
+  #     
+  #     # Save as PDF with exact dimensions
+  #     ggsave(file, 
+  #            plot = spine_simulation_planning_reactive_list$rod_plot, 
+  #            device = cairo_pdf, 
+  #            width = plot_width_mm / 10,  # Convert mm to cm
+  #            height = plot_height_mm / 10, 
+  #            units = "cm", 
+  #            dpi = 300)
+  #     
+  #   }
+  # )
 
   # 2) When the browser signals "downloadFinished", show a SweetAlert
   observeEvent(input$downloadFinished, {
