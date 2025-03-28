@@ -2816,8 +2816,11 @@ server <- function(input, output, session) {
       to = input$email_address,
       from = "align@solaspine.com",
       subject = "Rod Template from SOLASpine",
+      credentials = blastula::creds_file("/srv/shiny-server/alignment_planning/.blastula_email_creds")
       # credentials = blastula::creds_key("email_creds")
-      credentials = blastula::creds_file("/home/ubuntu/.blastula_email_creds")
+      # credentials = blastula::creds_file("/home/ubuntu/.blastula_email_creds")
+      # credentials = blastula::creds_file("/srv/shiny-server/alignment_planning/.blastula_email_creds")
+      
     )
     # blastula::smtp_send(
     #   email,
