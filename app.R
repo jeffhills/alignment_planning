@@ -19,7 +19,7 @@ library(magick)
 # library(plotly)
 library(redcapAPI)
 library(gt)
-
+library(blastula)
 
 
 options(shiny.maxRequestSize = 25*1024^2)
@@ -691,13 +691,30 @@ Shiny.addCustomMessageHandler('load-plot-image', function(data) {
                box(width = 12,
                    conditionalPanel(condition = "input.add_rod == true",
                                     useSweetAlert(),
-                                    div(
-                                      style = "text-align: center;",
-                                      downloadButton(outputId = "download_rod_template",
-                                                     label = "Download Rod Template", 
-                                                     icon = icon("download"),
-                                                     class = "d-flex justify-content-center",
-                                                     style = "font-size: 18px; 
+                                    column(width = 6, 
+                                           div(
+                                             style = "text-align: center;",
+                                             actionButton(inputId = "email_plan",
+                                                          label = "Email Plan",
+                                                          icon = icon("envelope"),
+                                                          style = "font-size: 18px; 
+                          padding: 12px 25px; 
+                          background-color: #28A745; 
+                          color: white; 
+                          border: none;
+                          display: inline-block;
+                          border-radius: 6px; 
+                          font-weight: bold;")
+                                           )
+                   ),
+                   column(width = 6, 
+                          div(
+                            style = "text-align: center;",
+                            downloadButton(outputId = "download_rod_template",
+                                           label = "Download Rod Template", 
+                                           icon = icon("download"),
+                                           class = "d-flex justify-content-center",
+                                           style = "font-size: 18px; 
                                                      padding: 12px 25px; 
                                                      background-color: #007BFF; 
                                                      color: white; 
@@ -707,8 +724,8 @@ Shiny.addCustomMessageHandler('load-plot-image', function(data) {
                                                      font-weight: bold;
                                                      margin-left: 10px;
                                                      margin-right: 10px;"
-                                      ),
-                                      tags$script(HTML("
+                            ),
+                            tags$script(HTML("
                                       $(document).ready(function(){
                                       $('#download_rod_template').on('click', function() {
                                       setTimeout(function(){
@@ -717,15 +734,18 @@ Shiny.addCustomMessageHandler('load-plot-image', function(data) {
                                       });
                                       });
                                                        ")),
-                                      h5(p(em("Open in Adobe Acrobat & Print as 'Poster' at 100% Scale.")))
-                                    )
+                            h5(p(em("Open in Adobe Acrobat & Print as 'Poster' at 100% Scale.")))
+                          )
                    ),
-                   fluidRow(
-                     column(width = 6, 
-                            h3("Preop & Planned Alignment"),
-                            fluidRow(
-                              plotOutput(outputId = "preop_spine_simulation_plot",
-                                         width = "auto",
+                   
+                   
+               ),
+               fluidRow(
+                 column(width = 6, 
+                        h3("Preop & Planned Alignment"),
+                        fluidRow(
+                          plotOutput(outputId = "preop_spine_simulation_plot",
+                                     width = "auto",
                                        height = "750px")
                                      ), 
                             fluidRow(
@@ -2423,6 +2443,7 @@ server <- function(input, output, session) {
       preop_vector <- c(alignment_parameters_list$pelvic_incidence, 
                         alignment_parameters_list$pelvic_tilt, 
                         alignment_parameters_list$l1pa, 
+                        alignment_parameters_list$t9pa,
                         alignment_parameters_list$t4pa, 
                         alignment_parameters_list$c2pa)
       
@@ -2436,16 +2457,18 @@ server <- function(input, output, session) {
         planned_vector <- c(alignment_parameters_list$pelvic_incidence, 
                             preop_tilt_vpa_list$pt_computed, 
                             preop_tilt_vpa_list$vpa_list$l1, 
+                            preop_tilt_vpa_list$vpa_list$t9, 
                             preop_tilt_vpa_list$vpa_list$t4, 
                             preop_tilt_vpa_list$vpa_list$c2)
         planned_vector <- paste0(round(planned_vector, 1), "º")
       }else{
-        planned_vector <- c("-", "-", "-", "-", "-")
+        planned_vector <- c("-", "-", "-", "-", "-", "-")
       }
       
       planning_df <- tibble('Measure' = c("PI",
                            "PT", 
                            "L1PA", 
+                           "T9PA",
                            "T4PA", 
                            "C2PA"), 
              preop_value = preop_vector,
@@ -2633,27 +2656,6 @@ server <- function(input, output, session) {
         coord_fixed(expand = FALSE, xlim = c(x_grid_min, x_grid_max), ylim = c(y_grid_min, y_grid_max)) +
         theme_void()
       
-        # coord_fixed(expand = FALSE, xlim = x_range_centered, ylim = y_range_centered) +  # Explicitly set x/y limits
-        # ylab("mm") +
-        # xlab("mm") +
-        # scale_x_continuous(expand = c(0, 0),
-        #                    breaks = seq(floor(x_range_centered[1] / x_grid_breaks) * x_grid_breaks, ceiling(x_range_centered[2] / x_grid_breaks) * x_grid_breaks, by = x_grid_breaks)) +
-        # scale_y_continuous(expand = c(0, 0),
-        #                    breaks = seq(floor(y_range_centered[1] / y_grid_breaks) * y_grid_breaks,
-        #                                 ceiling(y_range_centered[2] / y_grid_breaks) * y_grid_breaks, by = y_grid_breaks)) +
-        # theme(
-        #   panel.grid.major = element_line(linetype = "dashed", color = "grey50"),
-        #   panel.grid.minor = element_blank(),
-        #   plot.margin = margin(0, 0, 0, 0, "mm"),
-        #   panel.spacing = unit(0, "mm"),
-        #   axis.title = element_text(size = 10),
-        #   axis.text = element_text(size = 9),
-        #   panel.background = element_blank()
-        # )
-# 
-#       plot_width_mm <- diff(x_range_centered)  # Width in mm
-#       plot_height_mm <- diff(y_range_centered) # Height in mm
-
       plot_width_mm <- diff(c(x_grid_min, x_grid_max))  # Width in mm
       plot_height_mm <- diff(c(y_grid_min, y_grid_max)) # Height in mm
       
@@ -2709,7 +2711,126 @@ server <- function(input, output, session) {
       type = "success"
     )
   })
+  
+  
+  
+  
+  #### EMAIL PLAN #####
+  
+  observeEvent(input$email_plan, {
+    showModal(modalDialog(
+      title = "Email Your Rod Template",
+      textInput("email_address", "Enter Email Address:", placeholder = "example@domain.com"),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("send_email", "Send Email", icon = icon("paper-plane"),
+                     style = "background-color: #17A2B8; color: white;")
+      )
+    ))
+  })
+  
+  observeEvent(input$send_email, {
+    req(input$email_address)
+    
+    # Temporary PDF file creation
+    pdf_file <- tempfile(fileext = ".pdf")
 
+    # YOUR PDF generation code here
+    spine_levels <- c("pelvis", "sacrum", "l5", "l4", "l3", "l2", "l1",
+                      "t12", "t11", "t10", "t9", "t8", "t7", "t6", "t5", "t4", "t3", "t2", "t1",
+                      "c7", "c6", "c5", "c4", "c3", "c2", "c1")
+    
+    instrumented_vert_centered_df <- spine_build_list_reactivevalues$planned_spine_list$vert_coord_df  %>%
+      mutate(spine_level = factor(spine_level, levels = spine_levels, ordered = TRUE)) %>%
+      group_by(spine_level) %>%
+      filter(spine_level >= str_to_lower(input$rod_liv) & spine_level <= str_to_lower(input$rod_uiv)) %>%
+      mutate(x = x - spine_simulation_planning_reactive_list$rod_coord_df$x[[1]]) %>%
+      mutate(y = y - spine_simulation_planning_reactive_list$rod_coord_df$y[[1]])
+    
+    rod_coord_centered_df <- spine_simulation_planning_reactive_list$rod_coord_df %>%
+      mutate(x = x - spine_simulation_planning_reactive_list$rod_coord_df$x[[1]]) %>%
+      mutate(y = y - spine_simulation_planning_reactive_list$rod_coord_df$y[[1]])
+    
+    x_range_centered <- range(c(rod_coord_centered_df$x, instrumented_vert_centered_df$x), na.rm = TRUE)
+    y_range_centered <- range(c(rod_coord_centered_df$y, instrumented_vert_centered_df$y), na.rm = TRUE)
+    
+    y_grid_breaks <- 50
+    
+    y_grid_max <- ceiling(y_range_centered[[2]]/ y_grid_breaks) * y_grid_breaks
+    y_grid_min <- floor(y_range_centered[[1]]/ y_grid_breaks) * y_grid_breaks
+    x_grid_max <- ceiling(x_range_centered[[2]]/ 20) * 20
+    x_grid_min <- floor(x_range_centered[[1]]/ 20) * 20
+    
+    grid_corners_df <- expand_grid(x = c(x_grid_min, x_grid_max), y = c(y_grid_min, y_grid_max))
+    
+    y_gridline_tibble_df <- tibble(x_min = x_grid_min, x_max = x_grid_max, y = seq(from = y_grid_min, to = y_grid_max, by = 50))
+    
+    x_gridline_tibble_df <- tibble(x = seq(from = x_grid_min, to = x_grid_max, by = 40), y_min = y_grid_min, y_max = y_grid_min + 25) %>%
+      slice(-1)
+    
+    rod_plot_template <- ggplot() +
+      geom_polygon(data = instrumented_vert_centered_df, aes(x = x, y = y, group = spine_level), color = "grey50", fill = NA, alpha = 0.3) +
+      geom_segment(data = y_gridline_tibble_df, aes(x = x_min, xend = x_max, y = y, yend = y), color = "grey75", linetype = "dashed")+ 
+      draw_text(text = paste0(as.character(y_gridline_tibble_df$y), "mm"), x = y_gridline_tibble_df$x_min + 20, y = y_gridline_tibble_df$y, size = 7) +
+      geom_segment(data = x_gridline_tibble_df, aes(x = x, xend = x, y = y_min, yend = y_max), color = "grey75", linetype = "dashed")+ 
+      draw_text(text = paste0(as.character(x_gridline_tibble_df$x), "mm"),
+                x = x_gridline_tibble_df$x, y = x_gridline_tibble_df$y_max, size = 7) +
+      geom_path(data = rod_coord_centered_df,
+                aes(x = x, y = y),
+                color = "blue",
+                size = 2,
+                lineend = "round",
+                linejoin = "round") +
+      geom_point(data = grid_corners_df, aes(x =x, y = y), color = "red") +
+      coord_fixed(expand = FALSE, xlim = c(x_grid_min, x_grid_max), ylim = c(y_grid_min, y_grid_max)) +
+      theme_void()
+    
+    plot_width_mm <- diff(c(x_grid_min, x_grid_max))  
+    plot_height_mm <- diff(c(y_grid_min, y_grid_max))
+    
+    plot_width_in <- plot_width_mm / 25.4
+    plot_height_in <- plot_height_mm / 25.4
+    
+    ggsave(pdf_file,
+           plot = rod_plot_template,
+           device = cairo_pdf,
+           width = plot_width_in,
+           height = plot_height_in,
+           units = "in",
+           dpi = 300,
+           limitsize = FALSE)
+    
+    # # Compose email
+    # email <- blastula::compose_email(
+    #   body = "Your requested rod template is attached.",
+    #   attachments = pdf_file
+    # )
+    email <- blastula::compose_email(
+      body = "Your requested rod template is attached."
+    ) %>%
+      blastula::add_attachment(file = pdf_file)
+    
+    # Send email
+    blastula::smtp_send(
+      email,
+      to = input$email_address,
+      from = "align@solaspine.com",
+      subject = "Rod Template from SOLASpine",
+      # credentials = blastula::creds_key("email_creds")
+      credentials = blastula::creds_file("/home/ubuntu/.blastula_email_creds")
+    )
+    # blastula::smtp_send(
+    #   email,
+    #   to = input$email_address,
+    #   from = "align@solaspine.com",
+    #   subject = "Rod Template from SOLA Spine",
+    #   credentials = blastula::creds_file("/home/ubuntu/.blastula_email_creds")
+    # )
+    
+    removeModal()
+    
+    showNotification("Email successfully sent!", type = "message", duration = 5)
+  })
   
 }
 
