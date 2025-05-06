@@ -986,75 +986,9 @@ server <- function(input, output, session) {
       }
     }
     
-    ## extreme scenarios
-    # if(length(click_coord_reactive_list$coords)== 4){
-    # 
-    #   fem_head_x <- click_coord_reactive_list$coords$fem_head_center$x
-    #   s1_anterior_superior_x <- click_coord_reactive_list$coords$s1_anterior_superior$x
-    #   s1_posterior_superior_x <- click_coord_reactive_list$coords$s1_posterior_superior$x
-    # 
-    #   if((s1_anterior_superior_x < s1_posterior_superior_x) & click_coord_reactive_list$coords$l4_centroid$x >  s1_anterior_superior_x){
-    #     spine_orientation("right")
-    #   }
-    #   
-    #   if((s1_anterior_superior_x > s1_posterior_superior_x) & click_coord_reactive_list$coords$l4_centroid$x <  s1_anterior_superior_x){
-    #     spine_orientation("left")
-    #   }
-    #   
-    # }
-    
-    
   }
   )
   
-  
-  # observeEvent(input$spine_orientation_button, {
-  #   # Update the spine orientation value
-  #   if (spine_orientation() == "left") {
-  #     spine_orientation("right")
-  #     updateActionButton(session, "spine_orientation_button", label = "Facing RIGHT", icon = icon("arrow-right"))
-  #   } else {
-  #     spine_orientation("left")
-  #     updateActionButton(session, "spine_orientation_button", label = "Facing LEFT", icon = icon("arrow-left"))
-  #   }
-  # })
-  # 
-  # observeEvent(input$xray_click, {
-  #   if(length(click_coord_reactive_list$coords)==3){
-  #     
-  #     fem_head_x <- click_coord_reactive_list$coords$fem_head_center$x
-  #     s1_anterior_superior_x <- click_coord_reactive_list$coords$s1_anterior_superior$x
-  #     s1_posterior_superior_x <- click_coord_reactive_list$coords$s1_posterior_superior$x
-  # 
-  #     if(s1_anterior_superior_x < s1_posterior_superior_x){
-  #       # xray_orientation <- "left"
-  #       spine_orientation("left")
-  #       updateActionButton(session, "spine_orientation_button", label = "Facing LEFT", icon = icon("arrow-left"))
-  #     }else{
-  #       spine_orientation("right")
-  #       updateActionButton(session, "spine_orientation_button", label = "Facing RIGHT", icon = icon("arrow-right"))
-  #       # xray_orientation <- "right"
-  #     }
-  #   }
-  # 
-  # if(length(click_coord_reactive_list$coords)== 4){
-  #   
-  #   fem_head_x <- click_coord_reactive_list$coords$fem_head_center$x
-  #   s1_anterior_superior_x <- click_coord_reactive_list$coords$s1_anterior_superior$x
-  #   s1_posterior_superior_x <- click_coord_reactive_list$coords$s1_posterior_superior$x
-  #   
-  #   if((s1_anterior_superior_x < s1_posterior_superior_x) & click_coord_reactive_list$coords$l4_centroid$x >  s1_anterior_superior_x){
-  #     spine_orientation("right")
-  #     updateActionButton(session, "spine_orientation_button", label = "Facing RIGHT", icon = icon("arrow-right"))
-  #     
-  #   }else{
-  #     spine_orientation("left")
-  #     updateActionButton(session, "spine_orientation_button", label = "Facing LEFT", icon = icon("arrow-left"))
-  #     
-  #   }
-  # }
-  # }
-  # )
   
   
   
@@ -1315,11 +1249,21 @@ server <- function(input, output, session) {
   click_coordinates_df_reactive <- reactive({
     if (length(click_coord_reactive_list$coords) > 0) {
       # Convert the list to a tibble
-      tibble(
+      click_coordinates_df_reactive_df <- tibble(
         spine_point = names(click_coord_reactive_list$coords),
         x = map_dbl(click_coord_reactive_list$coords, "x"),
         y = map_dbl(click_coord_reactive_list$coords, "y")
       )
+      click_coordinates_df_reactive_df
+      
+      # fem_head_x <- (click_coordinates_df_reactive_df %>%
+      #                  filter(spine_point == "fem_head_center"))$x
+      # fem_head_y <- (click_coordinates_df_reactive_df %>%
+      #                  filter(spine_point == "fem_head_center"))$y
+      # 
+      # click_coordinates_df_reactive_df %>%
+      #   mutate(x = x - fem_head_x, y = y - fem_head_y)
+       
     } else {
       tibble(spine_point = character(), x = double(), y = double())
     }
@@ -1396,12 +1340,17 @@ server <- function(input, output, session) {
       c(NA, NA)
     }
     
+  
+    
     # Build the tibble including the S1 center
     current_coords_df <-  tibble(spine_point = "s1_center", x = s1_center[1], y = s1_center[2]) %>%
       bind_rows(xray_click_coordinates_df %>%
                   filter(spine_point != "s1_anterior_superior", 
                          spine_point != "s1_posterior_superior",
                          spine_point != "fem_head_center"))
+    
+
+    
     
     if(any(xray_click_coordinates_df$spine_point == "c2_centroid")){
       
@@ -1419,7 +1368,30 @@ server <- function(input, output, session) {
         left_join(current_coords_df) %>%
         filter(!is.na(x))
       
-      l5_centroid_y_adjustment <- (spine_coordinates_short_df %>% filter(spine_point == "s1_center"))$y + ((spine_coordinates_short_df %>% filter(spine_point == "l4_centroid"))$y - (spine_coordinates_short_df %>% filter(spine_point == "s1_center"))$y)*0.35
+      ### FIND L5 CENTROID WITH MODEL ####
+      # find adjustment for centering fem heads
+      fem_head_x <- (xray_click_coordinates_df %>%
+                       filter(spine_point == "fem_head_center"))$x
+      fem_head_y <- (xray_click_coordinates_df %>%
+                       filter(spine_point == "fem_head_center"))$y
+      
+      click_coord_x_list <- as.list(current_coords_df$x)
+      names(click_coord_x_list) <- current_coords_df$spine_point
+      
+      click_coord_y_list <- as.list(current_coords_df$y)
+      names(click_coord_y_list) <- current_coords_df$spine_point
+      
+      predicted_l5_coord <- compute_l5_centroid_x_y_vector_function(s1_centroid_x = click_coord_x_list$s1_center,
+                                                                    s1_centroid_y = click_coord_y_list$s1_center,
+                                                                    l4_centroid_x = click_coord_x_list$l4_centroid, 
+                                                                    l4_centroid_y = click_coord_y_list$l4_centroid, 
+                                                                    l1_centroid_x = click_coord_x_list$l1_centroid, 
+                                                                    l1_centroid_y = click_coord_y_list$l1_centroid, 
+                                                                    fem_head_center_x = fem_head_x, 
+                                                                    fem_head_center_y = fem_head_y)
+      
+      
+      # l5_centroid_y_adjustment <- (spine_coordinates_short_df %>% filter(spine_point == "s1_center"))$y + ((spine_coordinates_short_df %>% filter(spine_point == "l4_centroid"))$y - (spine_coordinates_short_df %>% filter(spine_point == "s1_center"))$y)*0.35
       
       head_df <- spine_coordinates_short_df %>%
         filter(spine_point == "c2_centroid") %>%
@@ -1427,20 +1399,7 @@ server <- function(input, output, session) {
         mutate(spine_point = "head") %>%
         mutate(index_count = index_count + 1)
       
-      # spine_y_filled_df <- spine_coordinate_labels_df %>%
-      #   left_join(spine_coordinates_short_df) %>%
-      #   mutate(y = zoo::na.spline(y)) %>%
-      #   # mutate(y = zoo::na.approx(y, rule = 2)) %>%
-      #   mutate(y = round(y, 3)) %>%
-      #   mutate(y = if_else(spine_point == "l5_centroid", l5_centroid_y_adjustment, y))
-      # 
-      # 
-      # final_coords_df <- spine_y_filled_df %>%
-      #   # mutate(x = spline(spine_coordinates_short_df$y, spine_coordinates_short_df$x, xout = spine_y_filled_df$y)$y) %>%
-      #   mutate(x = zoo::na.spline(x))%>%
-      #   select(spine_point, x, y) %>%
-      #   mutate(x = round(x, 3))
-      
+
       final_coords_df <- spine_coordinate_labels_df %>%
         left_join(spine_coordinates_short_df) %>%
         union_all(head_df) %>%
@@ -1448,9 +1407,13 @@ server <- function(input, output, session) {
         filter(spine_point != "head") %>%
         mutate(y = zoo::na.spline(y)) %>%
         mutate(y = round(y, 3)) %>%
-        mutate(y = if_else(spine_point == "l5_centroid", l5_centroid_y_adjustment, y)) %>%
+        mutate(x = if_else(spine_point == "l5_centroid", predicted_l5_coord[[1]], x),
+               y = if_else(spine_point == "l5_centroid", predicted_l5_coord[[2]], y)) %>%
+        # mutate(y = if_else(spine_point == "l5_centroid", l5_centroid_y_adjustment, y)) %>%
         select(spine_point, x, y) %>%
         mutate(x = round(x, 3))
+      
+
       
     }else{
       final_coords_df <- current_coords_df  %>%
@@ -2138,7 +2101,6 @@ server <- function(input, output, session) {
     df = tibble(
       spine_interspace = rev(jh_spine_levels_factors_df$interspace),
       adjustment = rep(0, length(jh_spine_levels_factors_df$interspace))
-      
     ), 
     pso_df = tibble()
   )
@@ -2481,8 +2443,8 @@ server <- function(input, output, session) {
       gt(planning_df) %>%
         tab_options(
           table.width = px(200), # Adjust width as needed
-          table.font.size = px(14),
-          data_row.padding = px(2)
+          table.font.size = px(12),
+          data_row.padding = px(0)
         ) %>%
         cols_label(
           Measure = md("**Measure**"), # Bold column name
@@ -2490,9 +2452,21 @@ server <- function(input, output, session) {
           Planned = "Planned"
         ) %>%
         tab_style(
-          style = list(cell_text(weight = "bold")),
-          locations = list(cells_column_labels(columns = everything()), cells_body(columns = "Measure"))# Bold Measure column
+          style = list(cell_text(weight = "bold", align = "center")),
+          locations = list(cells_column_labels(columns = everything()))# Bold Measure column
+        ) %>%
+        tab_style(
+          style = list(cell_text(align = "center")),
+          locations = list(cells_body(columns = c("Preop", "Planned")))# Bold Measure column
+        ) %>%
+        tab_style(
+          style = list(cell_text(weight = "bold", align = "right")),
+          locations = cells_body(columns = "Measure")# Bold Measure column
         ) 
+        # tab_style(
+        #   style = list(cell_text(weight = "bold")),
+        #   locations = list(cells_column_labels(columns = everything()), cells_body(columns = "Measure"))# Bold Measure column
+        # ) 
         # data_color(
         #   columns = "Planned",
         #   colors = scales::col_numeric(

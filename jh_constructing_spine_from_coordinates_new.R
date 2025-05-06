@@ -22,21 +22,50 @@ jh_calculate_slopes_perpendicular_to_spline_function <- function(df) {
   return(df %>% mutate(slope = slope))
 }
 
-compute_square_coordinates <- function(sp, ip, endplate_width) {
-  # Compute direction vector from sp to ip
-  dir_vector <- ip - sp
-  dir_vector <- dir_vector / sqrt(sum(dir_vector^2)) # Normalize
+# compute_square_coordinates <- function(sp, ip, endplate_width) {
+#   # Compute direction vector from sp to ip
+#   dir_vector <- ip - sp
+#   dir_vector <- dir_vector / sqrt(sum(dir_vector^2)) # Normalize
+#   
+#   # Compute perpendicular direction vector (90-degree rotation)
+#   perp_vector <- c(-dir_vector[2], dir_vector[1]) * endplate_width
+#   
+#   # Compute missing coordinates
+#   sa <- sp - perp_vector
+#   ia <- ip - perp_vector
+#   
+#   # Return as a list
+#   list(sp = sp, ip = ip, ia = ia, sa = sa)
+# }
+compute_square_coordinates <- function(sp, ip, endplate_width, spine_orientation = "left") {
+  # spine_orientation <- match.arg(spine_orientation)
   
-  # Compute perpendicular direction vector (90-degree rotation)
-  perp_vector <- c(-dir_vector[2], dir_vector[1]) * endplate_width
+  dx <- ip[1] - sp[1]
+  dy <- ip[2] - sp[2]
+  length <- sqrt(dx^2 + dy^2)
   
-  # Compute missing coordinates
-  sa <- sp - perp_vector
-  ia <- ip - perp_vector
+  # Perpendicular unit vector
+  perp_x <- -dy / length
+  perp_y <- dx / length
   
-  # Return as a list
-  list(sp = sp, ip = ip, ia = ia, sa = sa)
+  # Direction of anterior offset depends on orientation
+  if ((spine_orientation == "right" && perp_x < 0) ||
+      (spine_orientation == "left" && perp_x > 0)) {
+    perp_x <- -perp_x
+    perp_y <- -perp_y
+  }
+  
+  # offset_x <- (endplate_width / 2) * perp_x
+  # offset_y <- (endplate_width / 2) * perp_y
+  offset_x <- (endplate_width) * perp_x
+  offset_y <- (endplate_width) * perp_y
+  
+  sa <- c(sp[1] + offset_x, sp[2] + offset_y)
+  ia <- c(ip[1] + offset_x, ip[2] + offset_y)
+  
+  return(list(sp = sp, ip = ip, ia = ia, sa = sa))
 }
+
 
 jh_construct_odontoid_c2_coordinates_function <- function(c2_vert_coord_list = list()){
   if (length(c2_vert_coord_list) == 4) {
@@ -334,7 +363,7 @@ jh_construct_spine_coord_df_from_centroids_function <- function(s1_posterior_sup
                                             ..2 = ip, 
                                             ..3 =endplate_width,
                                             ..4 = vert_shape), 
-                                  .f = ~ compute_square_coordinates(sp = ..1, ip = ..2, endplate_width = ..3))) %>%
+                                  .f = ~ compute_square_coordinates(sp = ..1, ip = ..2, endplate_width = ..3, spine_orientation = spine_orientation))) %>%
     mutate(vert_coord_list = if_else(vert_shape == "wedged", vert_coord_list_wedged, vert_coord_list))%>%
     select(spine_level, vert_shape, vert_coord_list)
   
@@ -372,18 +401,7 @@ jh_construct_spine_coord_df_from_centroids_function <- function(s1_posterior_sup
   
 
   ## construct interspace coord df
-  # l5_s1_posterior_interspace_coord <- jh_calculate_point_along_line_function(coord_a = s1_posterior_superior,
-  #                                                                            coord_b = vert_coord_list$l5$ip, 
-  #                                                                            percent_a_to_b = 0.5)
-  # 
-  # return_list$interspace_coord_df <- posterior_corners_nested_df %>%
-  #   select(interspace = disc_level, posterior_wall_coord) %>%
-  #   unnest_wider(col = posterior_wall_coord, names_sep = "_")  %>%
-  #   select(interspace, x = posterior_wall_coord_1, y = posterior_wall_coord_2) %>%
-  #   mutate(x = if_else(interspace == "l5_s1", l5_s1_posterior_interspace_coord[[1]], x), 
-  #          y = if_else(interspace == "l5_s1", l5_s1_posterior_interspace_coord[[2]], y))
-  
-  # names(return_list$interspace_list) <- return_list$interspace_coord_df$interspace
+
   
   ## assemble coordinates into df
   return_list$vert_coord_df <- enframe(return_list$vert_coord_list) %>%
@@ -704,6 +722,15 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
     separate(remove = FALSE, spine_interspace, into = c("cranial", "caudal"))%>%
     mutate(caudal = if_else(caudal == "s1", "sacrum", caudal)) %>%
     select(spine_level = cranial, adjustment)
+  
+  if(spine_orientation == "right"){
+    pso_list <- map(.x = pso_list, .f = ~ .x*-1)
+    
+    spine_level_adjustment_df <- spine_level_adjustment_df %>%
+      mutate(adjustment = adjustment*-1)
+  }
+  spine_orientation <- "left"
+  
   
   sa_adjustment_list <- as.list(spine_level_adjustment_df$adjustment)
   names(sa_adjustment_list) <- spine_level_adjustment_df$spine_level

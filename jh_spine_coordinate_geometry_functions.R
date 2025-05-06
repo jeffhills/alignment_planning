@@ -432,3 +432,29 @@ jh_calculate_points_for_square_vertebra_function <- function(vert_coord_list) {
     
   }
 }
+
+
+
+compute_l5_centroid_x_y_vector_function <- function(s1_centroid_x = NA,
+                                                    s1_centroid_y = NA,
+                                                    l4_centroid_x = NA,
+                                                    l4_centroid_y = NA,
+                                                    l1_centroid_x = NA,
+                                                    l1_centroid_y = NA, 
+                                                    fem_head_center_x = 0, 
+                                                    fem_head_center_y = 0){
+  
+  s1_centroid_x <- s1_centroid_x - fem_head_center_x
+  l4_centroid_x <- l4_centroid_x - fem_head_center_x
+  l1_centroid_x <- l1_centroid_x - fem_head_center_x
+  
+  s1_centroid_y <- s1_centroid_y - fem_head_center_y
+  l4_centroid_y <- l4_centroid_y - fem_head_center_y
+  l1_centroid_y <- l1_centroid_y - fem_head_center_y
+  
+  x <-  -2.3065713+0.56815108*s1_centroid_x-0.052470422*s1_centroid_y+0.4914063*l4_centroid_x+0.057601093*l4_centroid_y-0.048191777*l1_centroid_x+0.0027333273*l1_centroid_y 
+   
+  y <- 2.601413+0.10427372*s1_centroid_x+0.52610784*s1_centroid_y-0.12734358*l4_centroid_x+0.52839458*l4_centroid_y+0.039031162*l1_centroid_x-0.056739585*l1_centroid_y
+  
+  return(c(x+fem_head_center_x, y+fem_head_center_y))
+}
