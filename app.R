@@ -696,7 +696,7 @@ Shiny.addCustomMessageHandler('load-plot-image', function(data) {
                                              style = "text-align: center;",
                                              actionButton(inputId = "email_plan",
                                                           label = "Email Plan",
-                                                          icon = icon("envelope"),
+                                                          icon = icon("envelope"),disabled = TRUE,
                                                           style = "font-size: 18px; 
                           padding: 12px 25px; 
                           background-color: #28A745; 
