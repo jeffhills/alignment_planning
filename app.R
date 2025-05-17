@@ -2315,6 +2315,7 @@ server <- function(input, output, session) {
       spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(planned_spine_coord_df = spine_build_list_reactivevalues$planned_spine_list$vert_coord_df,
                                                                                                     uiv = input$rod_uiv, 
                                                                                                     liv = input$rod_liv,
+                                                                                                    spine_orientation = spine_orientation(),
                                                                                                     number_of_knots = input$rod_knots)
       
       print("completed the function")
@@ -2784,14 +2785,22 @@ server <- function(input, output, session) {
     ) %>%
       blastula::add_attachment(file = pdf_file)
     
+    create_smtp_creds_key(
+      id = "email_creds",
+      user = "align@solaspine.com",
+      host = "smtp.zoho.com", 
+      port = 465, 
+      use_ssl = TRUE
+    )
+    
     # Send email
     blastula::smtp_send(
       email,
       to = input$email_address,
       from = "align@solaspine.com",
       subject = "Rod Template from SOLASpine",
-      credentials = blastula::creds_file("/srv/shiny-server/alignment_planning/.blastula_email_creds")
-      # credentials = blastula::creds_key("email_creds")
+      # credentials = blastula::creds_file("/srv/shiny-server/alignment_planning/.blastula_email_creds")
+      credentials = blastula::creds_key("email_creds")
       # credentials = blastula::creds_file("/home/ubuntu/.blastula_email_creds")
       # credentials = blastula::creds_file("/srv/shiny-server/alignment_planning/.blastula_email_creds")
       

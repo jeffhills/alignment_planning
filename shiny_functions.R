@@ -417,6 +417,7 @@ update_spine_segmental_planning_table_observe_button_function <- function(spine_
 jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
                                                   uiv = "T4", 
                                                   liv = "Pelvis",
+                                                  spine_orientation = "left",
                                                   number_of_knots = 10){
   
   spine_coord_for_rod_list <- jh_convert_spine_coord_df_to_lists_function(planned_spine_coord_df)
@@ -447,6 +448,8 @@ jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
   s1_length <- jh_calculate_distance_between_2_points_function(point_1 = spine_coord_for_rod_list$sacrum$sa, 
                                                                point_2 = spine_coord_for_rod_list$sacrum$sp)
   
+  x_modifier <- if_else(spine_orientation == "left", s1_length, s1_length*-1)
+  
   rod_coord_df <- planned_spine_coord_df %>%
     filter(vert_point %in% c("s1_posterior_superior", "sp")) %>%
     select(spine_level, x, y) %>%
@@ -454,7 +457,7 @@ jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
     filter(y > inferior_rod_point[[2]]) %>% 
     add_row(spine_level = "superior_rod", x = superior_rod_point[[1]], y = superior_rod_point[[2]]) %>%
     add_row(spine_level = "inferior_rod", x = inferior_rod_point[[1]], y = inferior_rod_point[[2]]) %>%
-    mutate(x = x + s1_length)%>%
+    mutate(x = x + x_modifier)%>%
     arrange(y)
   
   
