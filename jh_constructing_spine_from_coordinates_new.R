@@ -1,25 +1,45 @@
+# jh_calculate_slopes_perpendicular_to_spline_function <- function(df) {
+#   # df should have columns x and y in ascending vertebra order
+#   # Use spline interpolation to pass exactly through each centroid
+#   t <- seq_len(nrow(df))
+#   fx <- splinefun(t, df$x, method = "fmm")
+#   fy <- splinefun(t, df$y, method = "fmm")
+#   
+#   # Compute derivatives at each point
+#   dx <- fx(t, deriv = 1)
+#   dy <- fy(t, deriv = 1)
+#   
+#   # Slope of tangent line
+#   slope_tangent <- dy / dx
+#   
+#   # Slope of perpendicular line
+#   slope_perp <- -1 / slope_tangent
+#   
+#   slope <- slope_perp*(180/pi)
+#   
+#   # Return slopes (and optionally the original coordinates)
+#   # data.frame(x = df$x, y = df$y, slope_perp = slope_perp)
+#   return(df %>% mutate(slope = slope))
+# }
+
 jh_calculate_slopes_perpendicular_to_spline_function <- function(df) {
-  # df should have columns x and y in ascending vertebra order
-  # Use spline interpolation to pass exactly through each centroid
   t <- seq_len(nrow(df))
-  fx <- splinefun(t, df$x, method = "fmm")
-  fy <- splinefun(t, df$y, method = "fmm")
   
-  # Compute derivatives at each point
+  fx <- splinefun(t, df$x, method = "monoH.FC")
+  fy <- splinefun(t, df$y, method = "monoH.FC")
+  
   dx <- fx(t, deriv = 1)
   dy <- fy(t, deriv = 1)
   
-  # Slope of tangent line
-  slope_tangent <- dy / dx
+  tangent_angle_deg <- atan2(dy, dx) * 180 / pi
+  perp_angle_deg <- tangent_angle_deg + 90
   
-  # Slope of perpendicular line
-  slope_perp <- -1 / slope_tangent
-  
-  slope <- slope_perp*(180/pi)
-  
-  # Return slopes (and optionally the original coordinates)
-  # data.frame(x = df$x, y = df$y, slope_perp = slope_perp)
-  return(df %>% mutate(slope = slope))
+  tibble::as_tibble(df) %>%
+    mutate(
+      dx = dx,
+      dy = dy,
+      slope = perp_angle_deg
+    )
 }
 
 # compute_square_coordinates <- function(sp, ip, endplate_width) {
@@ -119,7 +139,8 @@ jh_calculate_coordinate_from_slope_hypotenuse_function <- function(x,
 
 jh_construct_spine_geom_sf_function <- function(vert_coord_list, 
                                                 baseline_spine = TRUE, 
-                                                fade_baseline_spine = FALSE, return_vert_geoms_list = FALSE) {
+                                                fade_baseline_spine = FALSE, 
+                                                return_vert_geoms_list = FALSE) {
   polygon_list <- lapply(vert_coord_list, function(coords) {
     
     # Convert each coordinate into a matrix of (x, y) values
@@ -210,6 +231,425 @@ jh_calculate_posterior_interspace_coord_from_coord_df_function <- function(vert_
 
 
 
+jh_calculate_perp_unit_vector_function <- function(df, spine_orientation = "left") {
+  t <- seq_len(nrow(df))
+  
+  fx <- splinefun(t, df$x, method = "monoH.FC")
+  fy <- splinefun(t, df$y, method = "monoH.FC")
+  
+  dx <- fx(t, deriv = 1)
+  dy <- fy(t, deriv = 1)
+  
+  mag <- sqrt(dx^2 + dy^2)
+  tx <- dx / mag
+  ty <- dy / mag
+  
+  # one of the 2 possible perpendicular directions
+  nx <- -ty
+  ny <-  tx
+  
+  # choose initial direction using global spine orientation
+  if (spine_orientation == "left") {
+    if (nx[1] < 0) {
+      nx <- -nx
+      ny <- -ny
+    }
+  } else {
+    if (nx[1] > 0) {
+      nx <- -nx
+      ny <- -ny
+    }
+  }
+  
+  # enforce continuity level to level
+  for (i in 2:length(nx)) {
+    if ((nx[i] * nx[i - 1] + ny[i] * ny[i - 1]) < 0) {
+      nx[i] <- -nx[i]
+      ny[i] <- -ny[i]
+    }
+  }
+  
+  df %>%
+    mutate(
+      dx = dx,
+      dy = dy,
+      tx = tx,
+      ty = ty,
+      nx = nx,
+      ny = ny
+    )
+}
+
+jh_get_vertebral_corners <- function(centroids_sup_inf_centers_df, s1_width, spine_orientation = "right") {
+  library(dplyr)
+  library(tibble)
+  library(tidyr)
+  
+  # Vertebrae order from inferior to superior (for width interpolation)
+  vertebra_order <- c("l5", "l4", "l3", "l2", "l1",
+                      "t12", "t11", "t10", "t9", "t8", "t7", "t6", "t5", "t4", "t3", "t2", "t1",
+                      "c7", "c6", "c5", "c4", "c3", "c2")
+  
+  n_verts <- length(vertebra_order)
+  
+  # Smooth widths from s1_width (at L5) to s1_width*0.5 (at C2)
+  vertebra_widths <- tibble(
+    spine_level = vertebra_order,
+    width = seq(s1_width, s1_width * 0.4, length.out = n_verts)
+  )
+  
+  inferior_endplate_center_label <- (filter(centroids_sup_inf_centers_df, spine_level == "l5") %>%
+                                       filter( spine_index == min(spine_index)))$spine_point
+  
+  superior_endplate_center_label <- (filter(centroids_sup_inf_centers_df, spine_level == "l5") %>%
+                                       filter( spine_index == max(spine_index)))$spine_point
+  
+  # Extract relevant points
+  inf_centroids <- centroids_sup_inf_centers_df %>%
+    filter(spine_point == inferior_endplate_center_label, spine_level %in% vertebra_order) %>%
+    select(spine_level, x_inf = x, y_inf = y)
+  
+  sup_centroids <- centroids_sup_inf_centers_df %>%
+    filter(spine_point == superior_endplate_center_label, spine_level %in% vertebra_order) %>%
+    select(spine_level, x_sup = x, y_sup = y)
+  
+  centroids <- centroids_sup_inf_centers_df %>%
+    filter(spine_point == "centroid", spine_level %in% vertebra_order) %>%
+    select(spine_level, x_c = x, y_c = y)
+  
+  # Join everything
+  df <- vertebra_widths %>%
+    left_join(inf_centroids, by = "spine_level") %>%
+    left_join(sup_centroids, by = "spine_level") %>%
+    left_join(centroids, by = "spine_level") %>%
+    mutate(spine_level = factor(spine_level, levels = vertebra_order)) %>%
+    arrange(spine_level)
+  
+  # Helper: get tangent direction at a point using neighboring centroids
+  # We use the centroid spine curve for tangent estimation
+  all_centroids <- centroids_sup_inf_centers_df %>%
+    filter(spine_point %in% c("centroid", "inf", "center")) %>%
+    # Use centroid where available, else inf (s1) or center (head)
+    mutate(order = case_when(
+      spine_level == "s1" ~ 0,
+      spine_level == "head" ~ 99,
+      TRUE ~ match(spine_level, vertebra_order)
+    )) %>%
+    filter(!is.na(order)) %>%
+    arrange(order)
+  
+  # Build smooth spline through all centroids for tangent estimation
+  spline_x <- splinefun(all_centroids$order, all_centroids$x, method = "natural")
+  spline_y <- splinefun(all_centroids$order, all_centroids$y, method = "natural")
+  
+  # For each vertebra, compute corners
+  get_perp_offset <- function(t_val, half_width, spline_x, spline_y) {
+    dx <- spline_x(t_val, deriv = 1)
+    dy <- spline_y(t_val, deriv = 1)
+    len <- sqrt(dx^2 + dy^2)
+    # Perpendicular unit vector (rotate 90 degrees)
+    px <- -dy / len
+    py <-  dx / len
+    list(px = px * half_width, py = py * half_width)
+  }
+  
+  results <- purrr::map_dfr(seq_len(nrow(df)), function(i) {
+    row <- df[i, ]
+    lvl <- as.character(row$spine_level)
+    t_val <- match(lvl, vertebra_order)
+    w <- row$width
+    
+    # Inferior endplate: perpendicular at inferior centroid
+    # We need t-value for the inferior centroid on the spline
+    # Use the vertebra's index but offset slightly inferior (toward lower t)
+    # Approximate by using t_val - 0.5 for inferior, t_val + 0.5 for superior
+    off_inf <- get_perp_offset(t_val - 0.35, w / 2, spline_x, spline_y)
+    off_sup <- get_perp_offset(t_val + 0.35, w / 2, spline_x, spline_y)
+    
+    tibble(
+      spine_level = lvl,
+      spine_point = c("inferior_posterior", "inferior_anterior", "superior_anterior", "superior_posterior"),
+      x = c(
+        row$x_inf + off_inf$px,
+        row$x_inf - off_inf$px,
+        row$x_sup - off_sup$px,
+        row$x_sup + off_sup$px
+      ),
+      y = c(
+        row$y_inf + off_inf$py,
+        row$y_inf - off_inf$py,
+        row$y_sup - off_sup$py,
+        row$y_sup + off_sup$py
+      )
+    )
+  })
+  
+  # Enforce polygon winding order: inf_posterior, inf_anterior, sup_anterior, sup_posterior
+  if(spine_orientation == "left"){
+    results %>%
+      mutate(
+        spine_level = factor(spine_level, levels = vertebra_order),
+        spine_point = factor(spine_point, levels = c("inferior_posterior", "inferior_anterior",
+                                                     "superior_anterior", "superior_posterior"))
+      ) %>%
+      arrange(spine_level, spine_point) %>%
+      mutate(spine_point = case_when(
+        spine_point == "inferior_posterior" ~ "inferior_anterior", 
+        spine_point == "inferior_anterior" ~ "inferior_posterior", 
+        spine_point == "superior_anterior" ~ "superior_posterior", 
+        spine_point == "superior_posterior" ~ "superior_anterior" 
+      ))
+    
+  }else{
+    results %>%
+      mutate(
+        spine_level = factor(spine_level, levels = vertebra_order),
+        spine_point = factor(spine_point, levels = c("inferior_posterior", "inferior_anterior",
+                                                     "superior_anterior", "superior_posterior"))
+      ) %>%
+      arrange(spine_level, spine_point) 
+  }
+}
+
+###############################################################
+###############################################################
+###############################################################
+
+###############################################################
+###############################################################
+###############################################################
+jh_find_s1_inferior_posterior_function <- function(s1_anterior,
+                                                   s1_posterior,
+                                                   spine_orientation) {
+  
+  # Vector from s1_posterior to s1_anterior
+  dx <- s1_anterior[[1]] - s1_posterior[[1]]
+  dy <- s1_anterior[[2]] - s1_posterior[[2]]
+  
+  # Perpendicular vector (rotate 90 degrees)
+  # Two options: (-dy, dx) or (dy, -dx)
+  # Choose based on spine_orientation and enforce y < s1_anterior y
+  leg_length <- sqrt(dx^2 + dy^2)
+  
+  perp1 <- c(-dy, dx)
+  perp2 <- c(dy, -dx)
+  
+  candidate_1 <- s1_posterior + perp1
+  candidate_2 <- s1_posterior + perp2
+  
+  # Select direction based on spine_orientation
+  if (spine_orientation == "right") {
+    s1_inf_post <- if (candidate_1[[2]] < candidate_2[[2]]) candidate_1 else candidate_2
+  } else {
+    s1_inf_post <- if (candidate_1[[2]] < candidate_2[[2]]) candidate_1 else candidate_2
+  }
+  
+  # Normalize and scale to enforce hypotenuse = 3 * leg_length
+  # Right angle at s1_posterior: legs are (s1_posterior->s1_anterior) and (s1_posterior->s1_inf_post)
+  # leg_length already = dist(s1_posterior, s1_anterior)
+  # hypotenuse = dist(s1_inf_post, s1_anterior) = sqrt(leg^2 + leg^2) = leg * sqrt(2) naturally
+  # To make hypotenuse = 3 * leg_length, the perpendicular leg must be sqrt(9-1) * leg = sqrt(8) * leg
+  
+  perp_leg_length <- sqrt(9 - 1) * leg_length  # = sqrt(8) * leg_length
+  
+  perp_dir <- s1_inf_post - s1_posterior
+  perp_dir_normalized <- perp_dir / sqrt(sum(perp_dir^2))
+  
+  s1_inf_post_scaled <- s1_posterior + perp_dir_normalized * perp_leg_length
+  
+  # Enforce y < s1_anterior y
+  if (s1_inf_post_scaled[[2]] >= s1_anterior[[2]]) {
+    perp_dir_alt <- -perp_dir_normalized
+    s1_inf_post_scaled <- s1_posterior + perp_dir_alt * perp_leg_length
+  }
+  
+  return(s1_inf_post_scaled)
+}
+
+
+jh_calculate_scaled_centered_spine_coordinates_from_centroids_function <- function(clicked_coord_df,
+
+                                                                                   spine_orientation,
+                                                                                   calibration_modifier = 1){
+  
+  clicked_coord_list <- (clicked_coord_df %>%
+                           mutate(coord = map2(.x = x, .y = y, .f = ~ c(.x, .y))))$coord
+  
+  names(clicked_coord_list) <- clicked_coord_df$spine_point
+  
+  femoral_head_center <- clicked_coord_list$fem_head_center
+  s1_anterior_superior <- clicked_coord_list$s1_anterior_superior
+  s1_posterior_superior <- clicked_coord_list$s1_posterior_superior
+  
+  s1_superior_center <- jh_get_point_along_line_function(coord_a = s1_anterior_superior, s1_posterior_superior, percent_a_to_b = 0.5)
+  
+  s1_inferior_mid_point <- jh_find_sacrum_inf_point_function(s1_posterior_sup = s1_posterior_superior,
+                                                             s1_anterior_sup = s1_anterior_superior,
+                                                             inf_length_multiplier = 1,
+                                                             spine_facing =  spine_orientation
+  )
+  
+  
+  clicked_coord_df <-tibble(spine_point = "s1_inferior_center", x = s1_inferior_mid_point[1], y = s1_inferior_mid_point[2]) %>%
+    bind_rows(tibble(spine_point = "s1_superior_center", x = s1_superior_center[1], y = s1_superior_center[2]))   %>%
+    bind_rows(clicked_coord_df %>%
+    filter(spine_point %in% get_spine_labels(centroid_labels_for_spline = TRUE)))%>%
+    distinct()
+  
+  #adjust for calibration#  
+  if(calibration_modifier != 1){
+    femoral_head_center <- femoral_head_center*calibration_modifier
+    s1_anterior_superior <- s1_anterior_superior*calibration_modifier
+    s1_posterior_superior <- s1_posterior_superior*calibration_modifier
+    
+    clicked_coord_df <- clicked_coord_df %>%
+      mutate(x = x*calibration_modifier, 
+             y = y*calibration_modifier)
+  }
+  
+  ## adjust all coordinates so that fem heads are at 0,0
+  s1_posterior_superior <- s1_posterior_superior - femoral_head_center 
+  s1_anterior_superior <- s1_anterior_superior - femoral_head_center 
+  centroid_points_centered_df <- clicked_coord_df %>%
+    mutate(x = x - femoral_head_center[[1]], 
+           y = y - femoral_head_center[[2]])
+  
+  s1_width <- jh_calculate_distance_between_2_points_function(point_1 = s1_anterior_superior, point_2 = s1_posterior_superior)
+  
+  femoral_head_center <- c(0,0)
+  
+  return_list <- list()
+  
+  ############## 
+  centroid_points_centered_df <- centroid_points_centered_df %>%
+    bind_rows(filter(centroid_points_centered_df, spine_point == "c2_centroid") %>%
+    mutate(spine_point = "head_centroid", y = y + s1_width))
+    
+  
+
+  # clicked_df <- tibble(spine_point = "s1_inferior_center", x = s1_inferior_mid_point[1], y = s1_inferior_mid_point[2]) %>%
+  #   union_all(clicked_coord_df) %>%
+  #   distinct()
+  
+  inf_sup_centroids_df <- expand_grid(spine_level = c('s1', 'l5', 'l4', 'l3', 'l2', 'l1', 't12', 't11', 't10', 't9', 't8', 't7', 't6', 't5', 't4', 't3', 't2', 't1', 'c7', 'c6', 'c5', 'c4', 'c3', 'c2', 'head'),
+                                      point = c('inferior_center', 'centroid', 'superior_center')
+  ) %>%
+    mutate(segment_index = case_when(
+      point == "inferior_center" ~ 0.2, 
+      point == "centroid" ~ 0.8, 
+      point == "superior_center" ~ 1 
+    )) %>%
+    mutate(spine_index = cumsum(segment_index)) %>%
+    mutate(spine_point = paste0(spine_level, "_", point)) %>%
+    left_join(centroid_points_centered_df)  %>%
+    mutate(y = zoo::na.spline(y, x = spine_index)) %>%
+    mutate(x = zoo::na.spline(x, x = spine_index)) %>%
+    select(spine_level, spine_point = point, spine_index, x, y)
+  
+  # return_list$centroid_points_centered_df <- centroid_points_centered_df
+  # 
+  # return_list$inf_sup_centroids_df <- inf_sup_centroids_df
+  
+  return_list$centroids_df <- inf_sup_centroids_df %>%
+    mutate(point_type = case_when(
+      spine_level == "s1" & spine_point == "superior_center" ~ "key_point",
+      spine_level == "s1" & spine_point != "superior_center" ~ "non_key",
+      spine_level == "head" ~ "non_key",
+      spine_point == "centroid" ~ "key_point",
+      TRUE ~ "non_key"
+    )) %>%
+    filter(point_type == "key_point") %>%
+    select(-point_type)
+  
+  
+  ##############
+  vertebral_corners_df <- jh_get_vertebral_corners(inf_sup_centroids_df, s1_width, spine_orientation = spine_orientation)
+  
+  s1_inferior_posterior_point <- jh_find_s1_inferior_posterior_function(s1_anterior = s1_anterior_superior, s1_posterior = s1_posterior_superior, spine_orientation = spine_orientation)
+  
+  s1_inferior_mid_point <- c(filter(inf_sup_centroids_df, spine_level == "s1", spine_point == "inferior_center")$x, filter(inf_sup_centroids_df, spine_level == "s1", spine_point == "inferior_center")$y)
+  
+  sacrum_df <- tibble(spine_level = "s1", spine_point = c("ip", 
+                                                          "ia",
+                                                          "sa",
+                                                          "sp"), 
+                      x = c(s1_inferior_posterior_point[1], s1_inferior_mid_point[1], s1_anterior_superior[1], s1_posterior_superior[1]),
+                      y = c(s1_inferior_posterior_point[2], s1_inferior_mid_point[2], s1_anterior_superior[2], s1_posterior_superior[2])
+  )
+  
+  spine_corner_coordinates_df <- sacrum_df %>%
+    union_all(vertebral_corners_df %>%
+                mutate(spine_point = case_when(
+                  spine_point == "inferior_posterior" ~ "ip",
+                  spine_point == "inferior_anterior" ~ "ia",
+                  spine_point == "superior_anterior" ~ "sa",
+                  spine_point == "superior_posterior" ~ "sp"
+                )))
+  
+  vert_coord_nested_df <-  spine_corner_coordinates_df %>%
+    mutate(xy = map2(.x = x, .y = y, .f = ~ c(.x, .y))) %>%
+    select(-x, -y) %>%
+    pivot_wider(names_from = spine_point, values_from = xy) %>%
+    mutate(vert_coord_list = pmap(.l = list(..1 = sp, ..2 = ip, ..3 = ia, ..4 = sa), 
+                                  .f = ~ list(sp = ..1, ip = ..2, ia = ..3, sa = ..4))) %>%
+    select(spine_level, vert_coord_list)
+  
+  vert_coord_list <- vert_coord_nested_df$vert_coord_list
+  
+  names(vert_coord_list) <- vert_coord_nested_df$spine_level
+  
+  # vert_coord_list <- c(sup_center = c(filter(return_list$centroids_df, spine_point == "superior_center", spine_level == "s1")$x, 
+  #                                     filter(return_list$centroids_df, spine_point == "superior_center", spine_level == "s1")$y),
+  #                      vert_coord_list$s1)
+  
+  vert_coord_list$s1$sup_center <- c(filter(return_list$centroids_df, spine_point == "superior_center", spine_level == "s1")$x, 
+                                    filter(return_list$centroids_df, spine_point == "superior_center", spine_level == "s1")$y)
+  
+  
+  # fix C1
+  vert_coord_list$c1$sp <- vert_coord_list$c2$sp
+  vert_coord_list$c1$ip <- jh_get_point_along_line_function(coord_a = vert_coord_list$c2$sp, coord_b = vert_coord_list$c2$ip,percent_a_to_b = 0.3)
+  vert_coord_list$c1$ia <- jh_get_point_along_line_function(coord_a = vert_coord_list$c2$sa, coord_b = vert_coord_list$c2$ia,percent_a_to_b = 0.3)
+  vert_coord_list$c1$sa <- vert_coord_list$c2$sa
+  
+  #fix c2
+  vert_coord_list$c2 <- jh_construct_odontoid_c2_coordinates_function(c2_vert_coord_list = vert_coord_list$c2)
+  
+  
+  ## assemble coordinates into df
+  return_list$vert_coord_df <- enframe(vert_coord_list) %>%
+    unnest() %>%
+    mutate(vert_point = names(value)) %>%
+    unnest_wider(value, names_sep = "_") %>%
+    select(spine_level = name, vert_point, x = value_1, y = value_2) 
+  
+  # return_list$vert_coord_list <- vert_coord_list <- c(
+  #   list(femoral_head_center = c(0, 0)),
+  #   vert_coord_list
+  # )
+  return_list$vert_coord_list <- vert_coord_list
+  
+  centroids_coord_df_for_list <- return_list$centroids_df %>%
+    mutate(spine_level_point = paste0(spine_level, "_", spine_point), 
+           coord = map2(.x = x, .y = y, .f = ~ c(.x, .y))) %>%
+    select(spine_level_point, coord)
+  
+  return_list$centroids_coord_list <- centroids_coord_df_for_list$coord
+  
+  names(return_list$centroids_coord_list) <- centroids_coord_df_for_list$spine_level_point
+  
+  # return_list$vert_coord_df  %>%
+  #   ggplot(aes(x = x, y = y, group = spine_level)) + 
+  #   geom_polygon()+
+  #   coord_fixed()
+  
+  return(return_list)
+  
+}
+
+###############################################################
+###############################################################
+###############################################################
 
 
 jh_construct_spine_coord_df_from_centroids_function <- function(s1_posterior_superior = NULL , 
@@ -243,110 +683,138 @@ jh_construct_spine_coord_df_from_centroids_function <- function(s1_posterior_sup
   
   s1_inf_point <- jh_find_sacrum_inf_point_function(s1_posterior_sup = s1_posterior_superior, s1_anterior_sup = s1_anterior_superior, inf_length_multiplier = 1)
   
-  ### First, fit a spline to locate all interspaces
-  centroid_interspaces_df <- centroid_df %>%
-    add_row(spine_point = "head_center", x = tail(centroid_df, 1)$x, y = tail(centroid_df, 1)$y + 100)%>%
-    add_row(spine_point = "s1_inf", x = s1_inf_point[[1]], y = s1_inf_point[[2]]) %>%
-    arrange(y) %>%
-    separate(spine_point, into = c("spine_level", "spine_point"), sep = "_") %>%
-    mutate(spine_numeric = row_number() -1 )%>%
-    bind_rows(tibble(spine_level = str_to_lower(str_replace_all(rev(jh_spine_levels_factors_df$interspace), "-", "_"))) %>%
-                mutate(spine_point = "interspace") %>%
-                mutate(spine_numeric = row_number() + 0.5)) %>%
-    arrange(spine_numeric) %>%
-    mutate(y = zoo::na.spline(y)) %>%
-    mutate(x = zoo::na.spline(x)) 
-  
-  # spine_orientation <- "left"
-  
-  
-  ### With known endplate width, calculate the posterior wall or posterior disc space coordinate that is perpendicular 
-  coord_w_post_wall_df <- jh_calculate_slopes_perpendicular_to_spline_function(df = centroid_interspaces_df) %>%
-    mutate(endplate_width = seq(from = s1_width, to = s1_width*0.5, length = nrow(.))) %>%
-    mutate(posterior_wall_point = pmap(.l = list(..1 = x,
-                                                 ..2 = y, 
-                                                 ..3 = slope, 
-                                                 ..4 = endplate_width*0.5), 
-                                       .f = ~ jh_calculate_coordinate_from_slope_hypotenuse_function(x = ..1, 
-                                                                                                     y = ..2,
-                                                                                                     slope_deg = ..3, 
-                                                                                                     hypotenuse = ..4,
-                                                                                                     spine_facing = spine_orientation,
-                                                                                                     posterior_or_anterior_coordinate = "posterior")))  %>%
-    mutate(posterior_wall_x = map(.x = posterior_wall_point, .f = ~ .x[[1]]))%>%
-    mutate(posterior_wall_y = map(.x = posterior_wall_point, .f = ~ .x[[2]])) %>%
-    select(-posterior_wall_point) %>%
+  centroids_with_scaled_order_df <- centroid_df %>%
+    mutate(distance_to_cranial_vert =
+             pmap(.l = list(..1 = x, ..2 = y, ..3 = lead(x), ..4 = lead(y)),
+                  .f = ~ jh_calculate_distance_between_2_points_function(point_1 = c(..1, ..2), point_2 = c(..3, ..4))
+             )
+    ) %>%
     unnest() %>%
-    mutate(posterior_wall_x = if_else(spine_point == "s1_center", s1_posterior_superior[[1]], posterior_wall_x),
-           posterior_wall_y = if_else(spine_point == "s1_center", s1_posterior_superior[[2]], posterior_wall_y))
+    mutate(distance_to_cranial_vert = if_else(is.na(distance_to_cranial_vert), max(distance_to_cranial_vert, na.rm = TRUE), distance_to_cranial_vert)) %>%
+    mutate(spine_index = cumsum(distance_to_cranial_vert))%>%
+    select(spine_point, x, y, spine_index) %>%
+    mutate(distance_to_inferior_centroid = spine_index - lag(spine_index))%>%
+    mutate(distance_to_superior_centroid = lead(spine_index) - spine_index) %>%
+    mutate(distance_to_inferior_centroid = if_else(is.na(distance_to_inferior_centroid), distance_to_superior_centroid, distance_to_inferior_centroid))%>%
+    mutate(distance_to_superior_centroid = if_else(is.na(distance_to_superior_centroid), distance_to_inferior_centroid, distance_to_superior_centroid)) %>%
+    mutate(vert_inf_index = spine_index - distance_to_inferior_centroid*0.4,
+           vert_sup_index = spine_index + distance_to_superior_centroid*0.4) %>%
+    select(spine_point, x, y, spine_index, vert_inf_index, vert_sup_index)%>%
+    separate(spine_point, into = c("spine_level", "spine_point"), sep = "_")
+
+
+  inferior_center_empty_df <- centroids_with_scaled_order_df %>%
+    select(spine_level, spine_point, x, y, spine_index = vert_inf_index) %>%
+    filter(spine_level %in% c("s1", "head") == FALSE) %>%
+    mutate(spine_point = "inferior_center", x = NA, y = NA)
+
+  superior_center_empty_df <- centroids_with_scaled_order_df %>%
+    select(spine_level, spine_point, x, y, spine_index = vert_sup_index) %>%
+    filter(spine_level %in% c("s1", "head") == FALSE) %>%
+    mutate(spine_point = "superior_center", x = NA, y = NA)
+
+
+  inf_sup_centroids_df <- centroids_with_scaled_order_df %>%
+    select(spine_level, spine_point, x, y, spine_index) %>%
+    union_all(inferior_center_empty_df)%>%
+    union_all(superior_center_empty_df) %>%
+    arrange(spine_index)%>%
+    mutate(
+      y = zoo::na.spline(y, x = spine_index),
+      x = zoo::na.spline(x, x = spine_index)
+    )
+
+
+  vertebral_corners_df <- jh_get_vertebral_corners(inf_sup_centroids_df, s1_width)
   
   
-  ## construct anterior interspace coordinates for thoracic wedging correction later:
-  ## construct anterior interspace coordinates for thoracic wedging correction later:
-  anterior_wall_coord_for_wedged_vert_df  <- coord_w_post_wall_df %>%
-    mutate(anterior_wall_point = pmap(.l = list(..1 = x,
-                                                ..2 = y, 
-                                                ..3 = slope, 
-                                                ..4 = endplate_width*0.5), 
-                                      .f = ~ jh_calculate_coordinate_from_slope_hypotenuse_function(x = ..1, 
-                                                                                                    y = ..2,
-                                                                                                    slope_deg = ..3, 
-                                                                                                    hypotenuse = ..4,
-                                                                                                    spine_facing = spine_orientation,                                                                                                posterior_or_anterior_coordinate = "anterior"))) %>%
-    mutate(anterior_wall_x = map(.x = anterior_wall_point, .f = ~ .x[[1]]))%>%
-    mutate(anterior_wall_y = map(.x = anterior_wall_point, .f = ~ .x[[2]])) %>%
-    select(-anterior_wall_point) %>%
-    unnest()  %>%
-    filter(str_detect(spine_point, "center|interspace")) %>%
-    filter(spine_level != "l5_s1") %>%
-    select(spine_level, anterior_wall_x, anterior_wall_y) %>%
-    mutate(spine_level = str_replace_all(spine_level, "s1", "l5_s1")) %>%
-    mutate(disc_level = spine_level)%>%
-    separate(spine_level, into = c("spine_level", "caudal"))%>%
-    select(-caudal) %>%
-    mutate(anterior_wall_x = if_else(spine_level == "l5", s1_anterior_superior[[1]], anterior_wall_x),
-           anterior_wall_y = if_else(spine_level == "l5", s1_anterior_superior[[2]], anterior_wall_y)) %>%
-    mutate(anterior_wall_coord = map2(.x = anterior_wall_x, .y = anterior_wall_y, 
-                                      .f = ~ c(.x, .y))) %>%
-    mutate(ia_by_disc = map2(.x = anterior_wall_coord, .y = lead(anterior_wall_coord),
-                             .f = ~ jh_get_point_along_line_function(coord_a = .x, 
-                                                                     coord_b = .y,
-                                                                     percent_a_to_b = 0.1)))%>%
-    mutate(sa_by_disc = map2(.x = anterior_wall_coord, .y = lead(anterior_wall_coord),
-                             .f = ~ jh_get_point_along_line_function(coord_a = .x, 
-                                                                     coord_b = .y,
-                                                                     percent_a_to_b = 0.9))) %>%
-    select(spine_level, ia_by_disc, sa_by_disc) %>%
-    filter(spine_level != "head") %>%
-    mutate(anterior_wall_height_by_disc = map2(.x = ia_by_disc, .y = sa_by_disc, .f = ~ jh_calculate_distance_between_2_points_function(point_1 = .x, point_2 = .y))) %>%
-    unnest(anterior_wall_height_by_disc)
+  ### First, fit a spline to locate all interspaces
+  # centroid_interspaces_df <- centroid_df %>%
+  #   mutate(spine_order = row_number()) %>%
+  #   add_row(spine_point = "head_center", x = tail(centroid_df, 1)$x, y = tail(centroid_df, 1)$y + 100, spine_order = 30)%>%
+  #   add_row(spine_point = "s1_inf", x = s1_inf_point[[1]], y = s1_inf_point[[2]], spine_order = 0) %>%
+  #   arrange(spine_order) %>%
+  #   select(-spine_order) %>%
+  #   # add_row(spine_point = "head_center", x = tail(centroid_df, 1)$x, y = tail(centroid_df, 1)$y + 100)%>%
+  #   # add_row(spine_point = "s1_inf", x = s1_inf_point[[1]], y = s1_inf_point[[2]]) %>%
+  #   # arrange(y) %>%
+  #   separate(spine_point, into = c("spine_level", "spine_point"), sep = "_") %>%
+  #   mutate(spine_numeric = row_number() -1 )%>%
+  #   bind_rows(tibble(spine_level = str_to_lower(str_replace_all(rev(jh_spine_levels_factors_df$interspace), "-", "_"))) %>%
+  #               mutate(spine_point = "interspace") %>%
+  #               mutate(spine_numeric = row_number() + 0.5)) %>%
+  #   arrange(spine_numeric) %>%
+  #   mutate(y = zoo::na.spline(y)) %>%
+  #   mutate(x = zoo::na.spline(x)) 
+  
+  
+  
+  # coord_w_post_wall_df <- jh_calculate_perp_unit_vector_function(
+  #   df = centroid_interspaces_df,
+  #   spine_orientation = spine_orientation
+  # ) %>%
+  #   mutate(endplate_width = seq(from = s1_width, to = s1_width * 0.5, length = nrow(.))) %>%
+  #   mutate(
+  #     posterior_wall_x = x + nx * (endplate_width * 0.5),
+  #     posterior_wall_y = y + ny * (endplate_width * 0.5),
+  #     anterior_wall_x  = x - nx * (endplate_width * 0.5),
+  #     anterior_wall_y  = y - ny * (endplate_width * 0.5)
+  #   ) %>%
+  #   mutate(
+  #     posterior_wall_x = if_else(spine_level == "s1" & spine_point == "center", s1_posterior_superior[[1]], posterior_wall_x),
+  #     posterior_wall_y = if_else(spine_level == "s1" & spine_point == "center", s1_posterior_superior[[2]], posterior_wall_y),
+  #     anterior_wall_x  = if_else(spine_level == "s1" & spine_point == "center", s1_anterior_superior[[1]], anterior_wall_x),
+  #     anterior_wall_y  = if_else(spine_level == "s1" & spine_point == "center", s1_anterior_superior[[2]], anterior_wall_y)
+  #   )
+  
+
+  
+  # anterior_wall_coord_for_wedged_vert_df  <- coord_w_post_wall_df %>%
+  #   filter(str_detect(spine_point, "center|interspace")) %>%
+  #   filter(spine_level != "l5_s1") %>%
+  #   select(spine_level, anterior_wall_x, anterior_wall_y) %>%
+  #   mutate(spine_level = str_replace_all(spine_level, "s1", "l5_s1")) %>%
+  #   mutate(disc_level = spine_level) %>%
+  #   separate(spine_level, into = c("spine_level", "caudal")) %>%
+  #   select(-caudal) %>%
+  #   mutate(anterior_wall_x = if_else(spine_level == "l5", s1_anterior_superior[[1]], anterior_wall_x),
+  #          anterior_wall_y = if_else(spine_level == "l5", s1_anterior_superior[[2]], anterior_wall_y)) %>%
+  #   mutate(anterior_wall_coord = map2(anterior_wall_x, anterior_wall_y, ~ c(.x, .y))) %>%
+  #   mutate(ia_by_disc = map2(anterior_wall_coord, lead(anterior_wall_coord),
+  #                            ~ jh_get_point_along_line_function(coord_a = .x, coord_b = .y, percent_a_to_b = 0.1))) %>%
+  #   mutate(sa_by_disc = map2(anterior_wall_coord, lead(anterior_wall_coord),
+  #                            ~ jh_get_point_along_line_function(coord_a = .x, coord_b = .y, percent_a_to_b = 0.9))) %>%
+  #   select(spine_level, ia_by_disc, sa_by_disc) %>%
+  #   filter(spine_level != "head") %>%
+  #   mutate(anterior_wall_height_by_disc = map2_dbl(ia_by_disc, sa_by_disc, jh_calculate_distance_between_2_points_function))
+  
   
   # return_list$coord_w_post_wall_df <- coord_w_post_wall_df
   
   ## computer posterior corner coordinates
-  posterior_corners_nested_df <- coord_w_post_wall_df %>%
-    filter(str_detect(spine_point, "center|interspace")) %>%
-    filter(spine_level != "l5_s1") %>%
-    select(spine_level, posterior_wall_x, posterior_wall_y) %>%
-    mutate(spine_level = str_replace_all(spine_level, "s1", "l5_s1")) %>%
-    mutate(disc_level = spine_level) %>%
-    separate(spine_level, into = c("spine_level", "caudal"))%>%
-    select(-caudal) %>%
-    mutate(posterior_wall_x = if_else(spine_level == "l5", s1_posterior_superior[[1]], posterior_wall_x),
-           posterior_wall_y = if_else(spine_level == "l5", s1_posterior_superior[[2]], posterior_wall_y)) %>%
-    mutate(posterior_wall_coord = map2(.x = posterior_wall_x, .y = posterior_wall_y, 
-                                       .f = ~ c(.x, .y))) %>%
-    mutate(ip = map2(.x = posterior_wall_coord, .y = lead(posterior_wall_coord),
-                     .f = ~ jh_get_point_along_line_function(coord_a = .x, 
-                                                             coord_b = .y,
-                                                             percent_a_to_b = 0.1)))%>%
-    mutate(sp = map2(.x = posterior_wall_coord, .y = lead(posterior_wall_coord),
-                     .f = ~ jh_get_point_along_line_function(coord_a = .x, 
-                                                             coord_b = .y,
-                                                             percent_a_to_b = 0.9))) %>%
-    filter(spine_level != "head") 
+  # posterior_corners_nested_df <- coord_w_post_wall_df %>%
+  #   filter(str_detect(spine_point, "center|interspace")) %>%
+  #   filter(spine_level != "l5_s1") %>%
+  #   select(spine_level, posterior_wall_x, posterior_wall_y) %>%
+  #   mutate(spine_level = str_replace_all(spine_level, "s1", "l5_s1")) %>%
+  #   mutate(disc_level = spine_level) %>%
+  #   separate(spine_level, into = c("spine_level", "caudal"))%>%
+  #   select(-caudal) %>%
+  #   mutate(posterior_wall_x = if_else(spine_level == "l5", s1_posterior_superior[[1]], posterior_wall_x),
+  #          posterior_wall_y = if_else(spine_level == "l5", s1_posterior_superior[[2]], posterior_wall_y)) %>%
+  #   mutate(posterior_wall_coord = map2(.x = posterior_wall_x, .y = posterior_wall_y, 
+  #                                      .f = ~ c(.x, .y))) %>%
+  #   mutate(ip = map2(.x = posterior_wall_coord, .y = lead(posterior_wall_coord),
+  #                    .f = ~ jh_get_point_along_line_function(coord_a = .x, 
+  #                                                            coord_b = .y,
+  #                                                            percent_a_to_b = 0.1)))%>%
+  #   mutate(sp = map2(.x = posterior_wall_coord, .y = lead(posterior_wall_coord),
+  #                    .f = ~ jh_get_point_along_line_function(coord_a = .x, 
+  #                                                            coord_b = .y,
+  #                                                            percent_a_to_b = 0.9))) %>%
+  #   filter(spine_level != "head") 
   
-
+  
   vert_coord_nested_df <-  posterior_corners_nested_df %>%
     select(spine_level, ip, sp) %>%
     left_join(coord_w_post_wall_df %>%
@@ -399,9 +867,9 @@ jh_construct_spine_coord_df_from_centroids_function <- function(s1_posterior_sup
   # Prepend the sacrum list to the beginning of vert_coord_list
   return_list$vert_coord_list <- c(list(sacrum = sacrum), vert_coord_list)
   
-
+  
   ## construct interspace coord df
-
+  
   
   ## assemble coordinates into df
   return_list$vert_coord_df <- enframe(return_list$vert_coord_list) %>%
@@ -431,6 +899,271 @@ jh_construct_spine_coord_df_from_centroids_function <- function(s1_posterior_sup
   return(return_list)
   
 } 
+
+
+# jh_construct_spine_coord_df_from_centroids_function <- function(s1_posterior_superior = NULL , 
+#                                                                 s1_anterior_superior = NULL, 
+#                                                                 centroid_df = tibble(),
+#                                                                 femoral_head_center = c(0,0),
+#                                                                 calibration_modifier = 1,
+#                                                                 spine_orientation = "left"){
+#   
+#   if(calibration_modifier != 1){
+#     femoral_head_center <- femoral_head_center*calibration_modifier
+#     s1_anterior_superior <- s1_anterior_superior*calibration_modifier
+#     s1_posterior_superior <- s1_posterior_superior*calibration_modifier
+#     centroid_df <- centroid_df %>%
+#       mutate(x = x*calibration_modifier, 
+#              y = y*calibration_modifier)
+#   }
+#   
+#   ## adjust all coordinates so that fem heads are at 0,0
+#   s1_posterior_superior <- s1_posterior_superior - femoral_head_center 
+#   s1_anterior_superior <- s1_anterior_superior - femoral_head_center 
+#   centroid_df <- centroid_df %>%
+#     mutate(x = x - femoral_head_center[[1]], 
+#            y = y - femoral_head_center[[2]])
+#   
+#   femoral_head_center <- c(0,0)
+#   
+#   return_list <- list()
+#   
+#   s1_width <- jh_calculate_distance_between_2_points_function(s1_posterior_superior, s1_anterior_superior)
+#   
+#   s1_inf_point <- jh_find_sacrum_inf_point_function(s1_posterior_sup = s1_posterior_superior, s1_anterior_sup = s1_anterior_superior, inf_length_multiplier = 1)
+#   
+#   ### First, fit a spline to locate all interspaces
+#   centroid_interspaces_df <- centroid_df %>%
+#     mutate(spine_order = row_number()) %>%
+#     add_row(spine_point = "head_center", x = tail(centroid_df, 1)$x, y = tail(centroid_df, 1)$y + 100, spine_order = 30)%>%
+#     add_row(spine_point = "s1_inf", x = s1_inf_point[[1]], y = s1_inf_point[[2]], spine_order = 0) %>%
+#     arrange(spine_order) %>%
+#     select(-spine_order) %>%
+#     # add_row(spine_point = "head_center", x = tail(centroid_df, 1)$x, y = tail(centroid_df, 1)$y + 100)%>%
+#     # add_row(spine_point = "s1_inf", x = s1_inf_point[[1]], y = s1_inf_point[[2]]) %>%
+#     # arrange(y) %>%
+#     separate(spine_point, into = c("spine_level", "spine_point"), sep = "_") %>%
+#     mutate(spine_numeric = row_number() -1 )%>%
+#     bind_rows(tibble(spine_level = str_to_lower(str_replace_all(rev(jh_spine_levels_factors_df$interspace), "-", "_"))) %>%
+#                 mutate(spine_point = "interspace") %>%
+#                 mutate(spine_numeric = row_number() + 0.5)) %>%
+#     arrange(spine_numeric) %>%
+#     mutate(y = zoo::na.spline(y)) %>%
+#     mutate(x = zoo::na.spline(x)) 
+#   
+#   # spine_orientation <- "left"
+#   
+#   
+#   ### With known endplate width, calculate the posterior wall or posterior disc space coordinate that is perpendicular 
+#   # coord_w_post_wall_df <- jh_calculate_slopes_perpendicular_to_spline_function(df = centroid_interspaces_df) %>%
+#   #   mutate(endplate_width = seq(from = s1_width, to = s1_width*0.5, length = nrow(.))) %>%
+#   #   mutate(posterior_wall_point = pmap(.l = list(..1 = x,
+#   #                                                ..2 = y,
+#   #                                                ..3 = slope,
+#   #                                                ..4 = endplate_width*0.5),
+#   #                                      .f = ~ jh_calculate_coordinate_from_slope_hypotenuse_function(x = ..1,
+#   #                                                                                                    y = ..2,
+#   #                                                                                                    slope_deg = ..3,
+#   #                                                                                                    hypotenuse = ..4,
+#   #                                                                                                    spine_facing = spine_orientation,
+#   #                                                                                                    posterior_or_anterior_coordinate = "posterior")))  %>%
+#   #   mutate(posterior_wall_x = map(.x = posterior_wall_point, .f = ~ .x[[1]]))%>%
+#   #   mutate(posterior_wall_y = map(.x = posterior_wall_point, .f = ~ .x[[2]])) %>%
+#   #   select(-posterior_wall_point) %>%
+#   #   unnest() %>%
+#   #   mutate(posterior_wall_x = if_else(spine_point == "s1_center", s1_posterior_superior[[1]], posterior_wall_x),
+#   #          posterior_wall_y = if_else(spine_point == "s1_center", s1_posterior_superior[[2]], posterior_wall_y))
+#   # 
+#   
+# coord_w_post_wall_df <- jh_calculate_perp_unit_vector_function(
+#   df = centroid_interspaces_df,
+#   spine_orientation = spine_orientation
+# ) %>%
+#   mutate(endplate_width = seq(from = s1_width, to = s1_width * 0.5, length = nrow(.))) %>%
+#   mutate(
+#     posterior_wall_x = x + nx * (endplate_width * 0.5),
+#     posterior_wall_y = y + ny * (endplate_width * 0.5),
+#     anterior_wall_x  = x - nx * (endplate_width * 0.5),
+#     anterior_wall_y  = y - ny * (endplate_width * 0.5)
+#   ) %>%
+#   mutate(
+#     posterior_wall_x = if_else(spine_level == "s1" & spine_point == "center", s1_posterior_superior[[1]], posterior_wall_x),
+#     posterior_wall_y = if_else(spine_level == "s1" & spine_point == "center", s1_posterior_superior[[2]], posterior_wall_y),
+#     anterior_wall_x  = if_else(spine_level == "s1" & spine_point == "center", s1_anterior_superior[[1]], anterior_wall_x),
+#     anterior_wall_y  = if_else(spine_level == "s1" & spine_point == "center", s1_anterior_superior[[2]], anterior_wall_y)
+#   )
+#   
+#   
+#   ## construct anterior interspace coordinates for thoracic wedging correction later:
+#   ## construct anterior interspace coordinates for thoracic wedging correction later:
+#   # anterior_wall_coord_for_wedged_vert_df  <- coord_w_post_wall_df %>%
+#   #   mutate(anterior_wall_point = pmap(.l = list(..1 = x,
+#   #                                               ..2 = y, 
+#   #                                               ..3 = slope, 
+#   #                                               ..4 = endplate_width*0.5), 
+#   #                                     .f = ~ jh_calculate_coordinate_from_slope_hypotenuse_function(x = ..1, 
+#   #                                                                                                   y = ..2,
+#   #                                                                                                   slope_deg = ..3, 
+#   #                                                                                                   hypotenuse = ..4,
+#   #                                                                                                   spine_facing = spine_orientation,                                                                                                posterior_or_anterior_coordinate = "anterior"))) %>%
+#   #   mutate(anterior_wall_x = map(.x = anterior_wall_point, .f = ~ .x[[1]]))%>%
+#   #   mutate(anterior_wall_y = map(.x = anterior_wall_point, .f = ~ .x[[2]])) %>%
+#   #   select(-anterior_wall_point) %>%
+#   #   unnest()  %>%
+#   #   filter(str_detect(spine_point, "center|interspace")) %>%
+#   #   filter(spine_level != "l5_s1") %>%
+#   #   select(spine_level, anterior_wall_x, anterior_wall_y) %>%
+#   #   mutate(spine_level = str_replace_all(spine_level, "s1", "l5_s1")) %>%
+#   #   mutate(disc_level = spine_level)%>%
+#   #   separate(spine_level, into = c("spine_level", "caudal"))%>%
+#   #   select(-caudal) %>%
+#   #   mutate(anterior_wall_x = if_else(spine_level == "l5", s1_anterior_superior[[1]], anterior_wall_x),
+#   #          anterior_wall_y = if_else(spine_level == "l5", s1_anterior_superior[[2]], anterior_wall_y)) %>%
+#   #   mutate(anterior_wall_coord = map2(.x = anterior_wall_x, .y = anterior_wall_y, 
+#   #                                     .f = ~ c(.x, .y))) %>%
+#   #   mutate(ia_by_disc = map2(.x = anterior_wall_coord, .y = lead(anterior_wall_coord),
+#   #                            .f = ~ jh_get_point_along_line_function(coord_a = .x, 
+#   #                                                                    coord_b = .y,
+#   #                                                                    percent_a_to_b = 0.1)))%>%
+#   #   mutate(sa_by_disc = map2(.x = anterior_wall_coord, .y = lead(anterior_wall_coord),
+#   #                            .f = ~ jh_get_point_along_line_function(coord_a = .x, 
+#   #                                                                    coord_b = .y,
+#   #                                                                    percent_a_to_b = 0.9))) %>%
+#   #   select(spine_level, ia_by_disc, sa_by_disc) %>%
+#   #   filter(spine_level != "head") %>%
+#   #   mutate(anterior_wall_height_by_disc = map2(.x = ia_by_disc, .y = sa_by_disc, .f = ~ jh_calculate_distance_between_2_points_function(point_1 = .x, point_2 = .y))) %>%
+#   #   unnest(anterior_wall_height_by_disc)
+#   
+#   anterior_wall_coord_for_wedged_vert_df  <- coord_w_post_wall_df %>%
+#     filter(str_detect(spine_point, "center|interspace")) %>%
+#     filter(spine_level != "l5_s1") %>%
+#     select(spine_level, anterior_wall_x, anterior_wall_y) %>%
+#     mutate(spine_level = str_replace_all(spine_level, "s1", "l5_s1")) %>%
+#     mutate(disc_level = spine_level) %>%
+#     separate(spine_level, into = c("spine_level", "caudal")) %>%
+#     select(-caudal) %>%
+#     mutate(anterior_wall_x = if_else(spine_level == "l5", s1_anterior_superior[[1]], anterior_wall_x),
+#            anterior_wall_y = if_else(spine_level == "l5", s1_anterior_superior[[2]], anterior_wall_y)) %>%
+#     mutate(anterior_wall_coord = map2(anterior_wall_x, anterior_wall_y, ~ c(.x, .y))) %>%
+#     mutate(ia_by_disc = map2(anterior_wall_coord, lead(anterior_wall_coord),
+#                              ~ jh_get_point_along_line_function(coord_a = .x, coord_b = .y, percent_a_to_b = 0.1))) %>%
+#     mutate(sa_by_disc = map2(anterior_wall_coord, lead(anterior_wall_coord),
+#                              ~ jh_get_point_along_line_function(coord_a = .x, coord_b = .y, percent_a_to_b = 0.9))) %>%
+#     select(spine_level, ia_by_disc, sa_by_disc) %>%
+#     filter(spine_level != "head") %>%
+#     mutate(anterior_wall_height_by_disc = map2_dbl(ia_by_disc, sa_by_disc, jh_calculate_distance_between_2_points_function))
+#   
+#   
+#   # return_list$coord_w_post_wall_df <- coord_w_post_wall_df
+#   
+#   ## computer posterior corner coordinates
+#   posterior_corners_nested_df <- coord_w_post_wall_df %>%
+#     filter(str_detect(spine_point, "center|interspace")) %>%
+#     filter(spine_level != "l5_s1") %>%
+#     select(spine_level, posterior_wall_x, posterior_wall_y) %>%
+#     mutate(spine_level = str_replace_all(spine_level, "s1", "l5_s1")) %>%
+#     mutate(disc_level = spine_level) %>%
+#     separate(spine_level, into = c("spine_level", "caudal"))%>%
+#     select(-caudal) %>%
+#     mutate(posterior_wall_x = if_else(spine_level == "l5", s1_posterior_superior[[1]], posterior_wall_x),
+#            posterior_wall_y = if_else(spine_level == "l5", s1_posterior_superior[[2]], posterior_wall_y)) %>%
+#     mutate(posterior_wall_coord = map2(.x = posterior_wall_x, .y = posterior_wall_y, 
+#                                        .f = ~ c(.x, .y))) %>%
+#     mutate(ip = map2(.x = posterior_wall_coord, .y = lead(posterior_wall_coord),
+#                      .f = ~ jh_get_point_along_line_function(coord_a = .x, 
+#                                                              coord_b = .y,
+#                                                              percent_a_to_b = 0.1)))%>%
+#     mutate(sp = map2(.x = posterior_wall_coord, .y = lead(posterior_wall_coord),
+#                      .f = ~ jh_get_point_along_line_function(coord_a = .x, 
+#                                                              coord_b = .y,
+#                                                              percent_a_to_b = 0.9))) %>%
+#     filter(spine_level != "head") 
+#   
+# 
+#   vert_coord_nested_df <-  posterior_corners_nested_df %>%
+#     select(spine_level, ip, sp) %>%
+#     left_join(coord_w_post_wall_df %>%
+#                 filter(spine_point == "centroid") %>%
+#                 select(spine_level, endplate_width)) %>%
+#     mutate(posterior_wall_height = map2(.x = ip, .y = sp, .f = ~ jh_calculate_distance_between_2_points_function(point_1 = .x, point_2 = .y))) %>%
+#     unnest(posterior_wall_height) %>%
+#     left_join(anterior_wall_coord_for_wedged_vert_df) %>%
+#     mutate(vert_shape = if_else(anterior_wall_height_by_disc > posterior_wall_height, "square", "wedged")) %>%
+#     select(spine_level, endplate_width, vert_shape, ip, sp, ia_by_disc, sa_by_disc) %>%
+#     mutate(vert_coord_list_wedged = pmap(.l = list(..1 = sp, ..2 = ip, ..3 = ia_by_disc, ..4 = sa_by_disc), 
+#                                          .f = ~ list(sp = ..1, ip = ..2, ia = ..3, sa = ..4))) %>%
+#     mutate(vert_coord_list = pmap(.l = list(..1 = sp,
+#                                             ..2 = ip, 
+#                                             ..3 =endplate_width,
+#                                             ..4 = vert_shape), 
+#                                   .f = ~ compute_square_coordinates(sp = ..1, ip = ..2, endplate_width = ..3, spine_orientation = spine_orientation))) %>%
+#     mutate(vert_coord_list = if_else(vert_shape == "wedged", vert_coord_list_wedged, vert_coord_list))%>%
+#     select(spine_level, vert_shape, vert_coord_list)
+#   
+#   
+#   vert_coord_list <- vert_coord_nested_df$vert_coord_list
+#   
+#   names(vert_coord_list) <- vert_coord_nested_df$spine_level
+#   
+#   
+#   
+#   # fix C1
+#   vert_coord_list$c1$sp <- vert_coord_list$c2$sp
+#   vert_coord_list$c1$ip <- jh_get_point_along_line_function(coord_a = vert_coord_list$c2$sp, coord_b = vert_coord_list$c2$ip,percent_a_to_b = 0.3)
+#   vert_coord_list$c1$ia <- jh_get_point_along_line_function(coord_a = vert_coord_list$c2$sa, coord_b = vert_coord_list$c2$ia,percent_a_to_b = 0.3)
+#   vert_coord_list$c1$sa <- vert_coord_list$c2$sa
+#   
+#   #fix c2
+#   vert_coord_list$c2 <- jh_construct_odontoid_c2_coordinates_function(c2_vert_coord_list = vert_coord_list$c2)
+#   
+#   
+#   #add sacrum
+#   sac_inf_far <- jh_find_sacrum_inf_point_function(s1_posterior_sup = s1_posterior_superior, 
+#                                                    s1_anterior_sup = s1_anterior_superior, 
+#                                                    spine_facing = spine_orientation,
+#                                                    inf_length_multiplier = 2.5)
+#   
+#   
+#   sacrum <- list()
+#   sacrum$sa <- s1_anterior_superior
+#   sacrum$sp <- s1_posterior_superior
+#   sacrum$inf <- c(sac_inf_far[[1]], sac_inf_far[[2]])
+#   
+#   # Prepend the sacrum list to the beginning of vert_coord_list
+#   return_list$vert_coord_list <- c(list(sacrum = sacrum), vert_coord_list)
+#   
+# 
+#   ## construct interspace coord df
+# 
+#   
+#   ## assemble coordinates into df
+#   return_list$vert_coord_df <- enframe(return_list$vert_coord_list) %>%
+#     unnest() %>%
+#     mutate(vert_point = names(value)) %>%
+#     unnest_wider(value, names_sep = "_") %>%
+#     select(spine_level = name, vert_point, x = value_1, y = value_2) 
+#   
+#   ## construct interspace coord df
+#   return_list$interspace_coord_df <- jh_calculate_posterior_interspace_coord_from_coord_df_function(vert_coord_df = return_list$vert_coord_df)
+#   
+#   return_list$interspace_list <- (return_list$interspace_coord_df %>%
+#                                     mutate(coord = map2(.x = x, .y = y, .f = ~ c(.x, .y))))$coord
+#   
+#   names(return_list$interspace_list) <- return_list$interspace_coord_df$interspace
+#   
+#   # return_list$interspace_list
+#   
+#   ## add the new centroids to the return list 
+#   centroid_coord_list <- (centroid_df %>%
+#                             mutate(centroid_coord = map2(.x = x, .y = y, .f = ~ c(.x, .y))))$centroid_coord
+#   
+#   names(centroid_coord_list) <- str_remove_all(centroid_df$spine_point, pattern = "_center|_centroid")
+#   
+#   return_list$centroid_coord_list <- c(list(femoral_head = c(0,0)), centroid_coord_list)
+#   
+#   return(return_list)
+#   
+# } 
 
 
 
@@ -679,36 +1412,75 @@ jh_rotate_translate_vert_list_coord_function <- function(vert_coord_list,
   return(vert_rot_coord_list)
   
 }
-
 jh_calculate_pso_coordinates_function <- function(vertebral_coord_list, pso_angle) {
-  # Extract coordinates
   sp <- vertebral_coord_list$sp
   ip <- vertebral_coord_list$ip
   ia <- vertebral_coord_list$ia
   sa <- vertebral_coord_list$sa
   
-  # Convert angle to radians
-  theta <- pso_angle * pi / 180
-  
-  # Compute the new sp coordinate
-  # Define the vector from sa to sp
+  # Vector from sa to sp and sa to ip
   sa_sp_vec <- c(sp[[1]] - sa[[1]], sp[[2]] - sa[[2]])
+  sa_ip_vec <- c(ip[[1]] - sa[[1]], ip[[2]] - sa[[2]])
   
-  # Compute the rotation matrix
-  rot_matrix <- matrix(c(cos(theta), -sin(theta), sin(theta), cos(theta)), nrow = 2)
+  # Maximum angle = angle at sa between old sp and ip
+  cos_max <- sum(sa_sp_vec * sa_ip_vec) / (sqrt(sum(sa_sp_vec^2)) * sqrt(sum(sa_ip_vec^2)))
+  max_angle_deg <- acos(clamp(cos_max, -1, 1)) * 180 / pi
   
-  # Apply the rotation to sa_sp_vec
-  new_sp_vec <- rot_matrix %*% sa_sp_vec
+  # Clamp pso_angle to maximum
+  pso_angle_clamped <- min(pso_angle, max_angle_deg)
+  theta <- pso_angle_clamped * pi / 180
   
-  # Compute the new sp coordinate
-  new_sp <- c(sa[[1]] + new_sp_vec[1], sa[[2]] + new_sp_vec[2])
-  # new_sp <- list(x = sa[[1]] + new_sp_vec[1], y = sa$y + new_sp_vec[2])
+  # Build both rotation directions
+  rot_ccw <- matrix(c(cos(theta), -sin(theta),  sin(theta), cos(theta)), nrow = 2, byrow = TRUE)
+  rot_cw  <- matrix(c(cos(theta),  sin(theta), -sin(theta), cos(theta)), nrow = 2, byrow = TRUE)
   
-  # Return updated coordinate list
-  updated_vertebral_coords <- list(sp = new_sp, ip = ip, ia = ia, sa = sa)
+  new_sp_ccw <- as.numeric(c(sa[[1]], sa[[2]]) + rot_ccw %*% sa_sp_vec)
+  new_sp_cw  <- as.numeric(c(sa[[1]], sa[[2]]) + rot_cw  %*% sa_sp_vec)
   
-  return(updated_vertebral_coords)
+  # Correct rotation moves sp closer to ip
+  dist_ccw <- sqrt(sum((new_sp_ccw - c(ip[[1]], ip[[2]]))^2))
+  dist_cw  <- sqrt(sum((new_sp_cw  - c(ip[[1]], ip[[2]]))^2))
+  
+  new_sp <- if(dist_ccw < dist_cw) new_sp_ccw else new_sp_cw
+  
+  list(sp = new_sp, ip = ip, ia = ia, sa = sa)
 }
+
+# Helper to clamp a value between min and max
+clamp <- function(x, min_val, max_val) max(min_val, min(max_val, x))
+
+
+# 
+# jh_calculate_pso_coordinates_function <- function(vertebral_coord_list, pso_angle) {
+#   # Extract coordinates
+#   sp <- vertebral_coord_list$sp
+#   ip <- vertebral_coord_list$ip
+#   ia <- vertebral_coord_list$ia
+#   sa <- vertebral_coord_list$sa
+#   
+#   # Convert angle to radians
+#   theta <- pso_angle * pi / 180
+#   
+#   # Compute the new sp coordinate
+#   # Define the vector from sa to sp
+#   sa_sp_vec <- c(sp[[1]] - sa[[1]], sp[[2]] - sa[[2]])
+#   
+#   # Compute the rotation matrix
+#   rot_matrix <- matrix(c(cos(theta), -sin(theta), sin(theta), cos(theta)), nrow = 2)
+#   
+#   # Apply the rotation to sa_sp_vec
+#   new_sp_vec <- rot_matrix %*% sa_sp_vec
+#   
+#   # Compute the new sp coordinate
+#   new_sp <- c(sa[[1]] + new_sp_vec[1], sa[[2]] + new_sp_vec[2])
+#   # new_sp <- list(x = sa[[1]] + new_sp_vec[1], y = sa$y + new_sp_vec[2])
+#   
+#   # Return updated coordinate list
+#   updated_vertebral_coords <- list(sp = new_sp, ip = ip, ia = ia, sa = sa)
+#   
+#   return(updated_vertebral_coords)
+# }
+
 
 jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_df = tibble(), 
                                                       pso_list = list(),
@@ -720,7 +1492,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   spine_level_adjustment_df <- segment_angle_adjustment_df %>%
     mutate(spine_interspace = str_to_lower(str_replace_all(spine_interspace, "-", "_"))) %>%
     separate(remove = FALSE, spine_interspace, into = c("cranial", "caudal"))%>%
-    mutate(caudal = if_else(caudal == "s1", "sacrum", caudal)) %>%
+    mutate(caudal = if_else(caudal == "s1", "s1", caudal)) %>%
     select(spine_level = cranial, adjustment)
   
   if(spine_orientation == "right"){
@@ -737,8 +1509,8 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   rotated_translated_spine_list <- list()
   
-  ## sacrum
-  rotated_translated_spine_list$sacrum <- spine_list$vert_coord_list$sacrum
+  ## s1
+  rotated_translated_spine_list$s1 <- spine_list$vert_coord_list$s1
   ##### next vert:
   
   spine_vert_list <- spine_list$vert_coord_list
@@ -749,10 +1521,10 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   }
   
   rotated_translated_spine_list$l5 <- jh_rotate_translate_vert_list_coord_function(vert_coord_list = spine_vert_list$l5, 
-                                                                    point_of_rotation = spine_list$vert_coord_list$sacrum$sp,
+                                                                    point_of_rotation = spine_list$vert_coord_list$s1$sp,
                                                                     segment_angle_adjustment = sa_adjustment_list$l5,
-                                                                    inferior_vertebra_original_list = spine_list$vert_coord_list$sacrum,
-                                                                    inferior_vertebra_new_list = spine_list$vert_coord_list$sacrum,
+                                                                    inferior_vertebra_original_list = spine_list$vert_coord_list$s1,
+                                                                    inferior_vertebra_new_list = spine_list$vert_coord_list$s1,
                                                                     # initial_translation_correction = c(0,0), 
                                                                     spine_orientation = spine_orientation)
   
@@ -1108,25 +1880,22 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   c1_rot_trans_list$ia <- jh_get_point_along_line_function(coord_a = rotated_translated_spine_list$c2$ia, coord_b = rotated_translated_spine_list$c2$sa, percent_a_to_b = 0.75)
   c1_rot_trans_list$sa <- rotated_translated_spine_list$c2$sa
   
-  # 
-  # # c1_rot_trans_list$sp <- c2_rot_trans_list$vert_coord$sp
-  # c1_rot_trans_list$sp <- h_get_point_along_line_function(coord_a = c2_rot_trans_list$vert_coord$sa, coord_b = c2_rot_trans_list$vert_coord$sp, percent_a_to_b = 2)
-  # c1_rot_trans_list$ip <- jh_get_point_along_line_function(coord_a = c2_rot_trans_list$vert_coord$sp, coord_b = c2_rot_trans_list$vert_coord$ip, percent_a_to_b = 0.3)
-  # c1_rot_trans_list$ia <- jh_get_point_along_line_function(coord_a = c2_rot_trans_list$vert_coord$sa, coord_b = c2_rot_trans_list$vert_coord$ia, percent_a_to_b = 0.3)
-  # c1_rot_trans_list$sa <- c2_rot_trans_list$vert_coord$sa
-  
+
   rotated_translated_spine_list$c1 <- c1_rot_trans_list
   
+
   return_list <- list()
   if(adjust_for_pt_change == TRUE){
     
-    preop_pt <- jh_calculate_vertebral_tilt_function(vertebral_centroid = spine_list$centroid_coord_list$s1, 
-                                                     femoral_head_center = spine_list$centroid_coord_list$femoral_head, 
+    preop_pt <- jh_calculate_vertebral_tilt_function(vertebral_centroid = spine_list$centroids_coord_list$s1_superior_center, 
+                                                     femoral_head_center = c(0,0),
+                                                     # femoral_head_center = spine_list$centroids_coord_list$femoral_head, 
                                                      pelvic_tilt_modifier = TRUE,
                                                      spine_orientation = spine_orientation)
     
-    preop_c2_tilt <- jh_calculate_vertebral_tilt_function(vertebral_centroid = spine_list$centroid_coord_list$c2, 
-                                                          femoral_head_center = spine_list$centroid_coord_list$femoral_head, 
+    preop_c2_tilt <- jh_calculate_vertebral_tilt_function(vertebral_centroid = spine_list$centroids_coord_list$c2, 
+                                                          femoral_head_center = c(0,0),
+                                                          # femoral_head_center = spine_list$centroids_coord_list$femoral_head, 
                                                           pelvic_tilt_modifier = FALSE,
                                                           spine_orientation = spine_orientation)
     
@@ -1159,14 +1928,14 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
     return_list$interspace_list <- (return_list$interspace_coord_df %>%
                                       mutate(coord = map2(.x = x, .y = y, .f = ~ c(.x, .y))))$coord
     
-    return_list$centroid_coord_list <- map2(.x = return_list$vert_coord_list, .y = names(return_list$vert_coord_list),
+    return_list$centroids_coord_list <- map2(.x = return_list$vert_coord_list, .y = names(return_list$vert_coord_list),
                                             .f = ~ jh_calculate_vertebra_centroid_function(vertebra_coords = .x, vertebral_level = .y))
     
-    names(return_list$centroid_coord_list) <- str_replace_all(names(return_list$vert_coord_list), "sacrum", "s1")
+    names(return_list$centroids_coord_list) <- str_replace_all(names(return_list$vert_coord_list), "sacrum", "s1")
     
-    return_list$centroid_coord_list <- c(list(femoral_head = c(0,0)), return_list$centroid_coord_list)
+    return_list$centroids_coord_list <- c(list(femoral_head = c(0,0)), return_list$centroids_coord_list)
     
-    return_list$centroid_coord_list$c1 <- NULL
+    return_list$centroids_coord_list$c1 <- NULL
     
     
     
@@ -1180,14 +1949,14 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
     return_list$interspace_list <- (return_list$interspace_coord_df %>%
                                       mutate(coord = map2(.x = x, .y = y, .f = ~ c(.x, .y))))$coord
     
-    return_list$centroid_coord_list <- map2(.x = return_list$vert_coord_list, .y = names(return_list$vert_coord_list),
+    return_list$centroids_coord_list <- map2(.x = return_list$vert_coord_list, .y = names(return_list$vert_coord_list),
                                             .f = ~ jh_calculate_vertebra_centroid_function(vertebra_coords = .x, vertebral_level = .y))
     
-    names(return_list$centroid_coord_list) <- str_replace_all(names(return_list$vert_coord_list), "sacrum", "s1")
+    names(return_list$centroids_coord_list) <- str_replace_all(names(return_list$vert_coord_list), "sacrum", "s1")
     
-    return_list$centroid_coord_list <- c(list(femoral_head = c(0,0)), return_list$centroid_coord_list)
+    return_list$centroids_coord_list <- c(list(femoral_head = c(0,0)), return_list$centroids_coord_list)
     
-    return_list$centroid_coord_list$c1 <- NULL
+    return_list$centroids_coord_list$c1 <- NULL
     
     
   }
@@ -1316,7 +2085,65 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
 
 
 
-
+jh_spine_build_sacrum_function <- function(pelvic_incidence = 50,
+                                           pelvic_tilt = 10,
+                                           fem_head_center_coord = c(0,0), 
+                                           fh_to_s1_center = 10, 
+                                           s1_endplate_length = 3){
+  
+  ## compute radians
+  pelvic_incidence_radians <- (pi / 180) * (pelvic_incidence)
+  pelvic_tilt_radians <- (pi / 180) * (pelvic_tilt)
+  sacral_slope_radians <- (pi / 180) * (pelvic_incidence - pelvic_tilt)
+  
+  sacrum_list <- list()
+  # S1 mid (center of superior endplate) located along the PT ray from FH
+  sacrum_list$mid <- c(
+    fem_head_center_coord[1] - fh_to_s1_center * sin(pelvic_tilt_radians),
+    fem_head_center_coord[2] + fh_to_s1_center * cos(pelvic_tilt_radians)
+  )
+  
+  # Unit vector along superior endplate, from SP → SA
+  u <- c(cos(sacral_slope_radians), -sin(sacral_slope_radians))
+  # Superior corners
+  sacrum_list$sp <- sacrum_list$mid - 0.5 * s1_endplate_length * u
+  sacrum_list$sa <- sacrum_list$mid + 0.5 * s1_endplate_length * u
+  
+  posterior_sacrum_length <- jh_calculate_distance_between_2_points_function(point_1 = sacrum_list$sp, point_2 = fem_head_center_coord)*0.8
+  
+  perp1 <- c(-u[2],  u[1])
+  perp2 <- c( u[2], -u[1])
+  
+  if(pelvic_incidence - pelvic_tilt < 91){
+    ip = if(perp1[2] < 0) perp1 else perp2
+  }else{
+    ip = if(perp1[2] > 0) perp1 else perp2
+  }
+  
+  sacrum_list$ip = c(sacrum_list$sp[[1]] + posterior_sacrum_length * ip[1], 
+                     sacrum_list$sp[[2]] + posterior_sacrum_length * ip[2])
+  
+  sacrum_list$ia <- c(sacrum_list$ip[[1]] + s1_endplate_length*0.1 * cos(sacral_slope_radians), 
+                      sacrum_list$ip[[2]] - s1_endplate_length*0.1 * sin(sacral_slope_radians))
+  
+  sacrum_sf <- st_polygon(list(rbind(sacrum_list$sp,
+                                     sacrum_list$sa, 
+                                     sacrum_list$ia,
+                                     sacrum_list$ip, 
+                                     sacrum_list$sp)))
+  
+  sacrum_df <- tibble(
+    spine_level = "s1",
+    spine_point = c("sp","sa","ia","ip","mid"),
+    x     = c(sacrum_list$sp[1],  sacrum_list$s1_mid[1], sacrum_list$sa[1], sacrum_list$ia[1], sacrum_list$ip[1], sacrum_list$sp[1]),
+    y     = c(sacrum_list$sp[2], sacrum_list$s1_mid[2], sacrum_list$sa[2], sacrum_list$ia[2], sacrum_list$ip[2], sacrum_list$sp[2])
+  )
+  
+  return(list(sacrum_list = sacrum_list, 
+              sacrum_df = sacrum_df,
+              sacrum_sf = sacrum_sf 
+  ))
+}
 
 jh_construct_vpa_line_geoms_from_vert_coord_function <- function(vertebral_level, 
                                                                  centroid_coord_list, 
@@ -1324,7 +2151,12 @@ jh_construct_vpa_line_geoms_from_vert_coord_function <- function(vertebral_level
                                                                  line_color = "blue"){
   
   fem_head_center <- centroid_coord_list$femoral_head
-  s1_center <- centroid_coord_list$s1
+  
+  if(any(names(centroid_coord_list) == "s1")){
+    s1_center <- centroid_coord_list$s1
+  }else{
+    s1_center <- centroid_coord_list$s1_superior_center
+  }
   
   level_centroid <- centroid_coord_list[[paste0(str_to_lower(vertebral_level))]]
   
