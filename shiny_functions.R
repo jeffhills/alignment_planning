@@ -415,102 +415,498 @@ update_spine_segmental_planning_table_observe_button_function <- function(spine_
   }, ignoreNULL = TRUE, ignoreInit = TRUE)
 }
 
+
+########################### CONSTRUCTION ROD FUNCTION ##############################
+
+
 jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
-                                                  uiv = "T4", 
+                                                  uiv = "T4",
                                                   liv = "Pelvis",
                                                   spine_orientation = "left",
-                                                  number_of_knots = 5){
+                                                  contouring_percent = 100) {
   
-  if(number_of_knots < 4){
-    number_of_knots <- 4
-  }
-  if(number_of_knots > 10){
-    number_of_knots <- 10
-  }
+  # Validate input
+  contouring_percent <- max(0, min(100, as.numeric(contouring_percent)))
+  if(is.na(contouring_percent)) contouring_percent <- 100
   
-  spine_level_numeric_df <-  planned_spine_coord_df %>%
-    select(spine_level) %>%
-    distinct()%>%
-    mutate(spine_level = fct_inorder(spine_level)) %>%
-    mutate(spine_level_numeric = as.numeric(spine_level)) 
+  spine_levels_ordered <- c("pelvis", "s1", "l5", "l4", "l3", "l2", "l1",
+                            "t12", "t11", "t10", "t9", "t8", "t7", "t6", "t5",
+                            "t4", "t3", "t2", "t1",
+                            "c7", "c6", "c5", "c4", "c3", "c2")
   
-  ### UIV first ####
-  uiv_numeric <- filter(spine_level_numeric_df, spine_level == str_to_lower(uiv))$spine_level_numeric
+  uiv_lower <- str_to_lower(uiv)
+  liv_lower <- str_to_lower(liv)
+  liv_lower <- if(liv_lower == "sacrum") "s1" else liv_lower
   
+  uiv_idx <- which(spine_levels_ordered == uiv_lower)
+  liv_idx <- which(spine_levels_ordered == liv_lower)
   
-  ### LIV NOW ###
-  if(str_to_lower(liv) == "pelvis" | str_to_lower(liv) == "s1" | str_to_lower(liv) == "sacrum"){
-    
-    liv_numeric <- 0
-    
-    s1_post_points_df <- planned_spine_coord_df %>%
-      filter(spine_level == "s1") %>%
-      filter(vert_point %in% c("sp", "ip"))
-    
-    s1_sp <- c(filter(s1_post_points_df, vert_point == "sp")$x, filter(s1_post_points_df, vert_point == "sp")$y)
-    s1_ip <- c(filter(s1_post_points_df, vert_point == "ip")$x, filter(s1_post_points_df, vert_point == "ip")$y)
-    
-  }else{
-    liv_numeric <- filter(spine_level_numeric_df, spine_level == str_to_lower(liv))$spine_level_numeric
-  }
+  if(length(uiv_idx) == 0 || length(liv_idx) == 0) stop("Invalid UIV or LIV specified")
   
-  ### NOW GET THE DF ###
-  vert_sup_endplates_for_rod_df <- planned_spine_coord_df %>%
-    mutate(spine_level = fct_inorder(spine_level)) %>%
-    mutate(spine_level_numeric = as.numeric(spine_level)) %>%
-    filter(between(spine_level_numeric, liv_numeric, uiv_numeric)) %>%
-    filter(vert_point %in% c("sa", "sp"))
+  instrumented_levels <- spine_levels_ordered[liv_idx:uiv_idx]
   
-  new_rod_coord_df <- vert_sup_endplates_for_rod_df %>%
+  # ── Get s1 posterior points for iliac extension ───────────────────────────
+  s1_post_df <- planned_spine_coord_df %>%
+    filter(spine_level == "s1", vert_point %in% c("sp", "ip"))
+  
+  s1_sp <- c(filter(s1_post_df, vert_point == "sp")$x,
+             filter(s1_post_df, vert_point == "sp")$y)
+  s1_ip <- c(filter(s1_post_df, vert_point == "ip")$x,
+             filter(s1_post_df, vert_point == "ip")$y)
+  
+  # ── Compute rod contact point for each instrumented vertebra ──────────────
+  rod_points_df <- planned_spine_coord_df %>%
+    filter(spine_level %in% instrumented_levels,
+           vert_point %in% c("sa", "sp")) %>%
     pivot_wider(names_from = vert_point, values_from = c(x, y)) %>%
     filter(!is.na(x_sp), !is.na(x_sa)) %>%
     mutate(
-      x = 2 * x_sp - x_sa,
-      y = 2 * y_sp - y_sa
+      rod_x = 2 * x_sp - x_sa,
+      rod_y = 2 * y_sp - y_sa
     ) %>%
-    select(spine_level, x, y) 
+    mutate(spine_level = factor(spine_level,
+                                levels = spine_levels_ordered,
+                                ordered = TRUE)) %>%
+    arrange(spine_level) %>%
+    select(spine_level, x = rod_x, y = rod_y)
   
-  
-  if(str_to_lower(liv) == "pelvis"){
-    rod_sup <- c(filter(new_rod_coord_df, spine_level == "s1")$x, filter(new_rod_coord_df, spine_level == "s1")$y)
-    rod_inf <- s1_ip + rod_sup - s1_sp
+  # ── Add distal extension depending on LIV ────────────────────────────────
+  if(liv_lower == "pelvis"){
+    # Extend to iliac screw position
+    s1_rod_point <- c(filter(rod_points_df, spine_level == "s1")$x,
+                      filter(rod_points_df, spine_level == "s1")$y)
     
-    rod_inf_coord <- jh_get_point_along_line_function(coord_a = rod_sup, coord_b = rod_inf, percent_a_to_b = 0.4)
+    pelvis_rod_point <- s1_ip + s1_rod_point - s1_sp
+    pelvis_rod_point <- jh_get_point_along_line_function(
+      coord_a        = s1_rod_point,
+      coord_b        = pelvis_rod_point,
+      percent_a_to_b = 0.4
+    )
     
-    new_rod_coord_df <- tibble(spine_level = "pelvis", x = rod_inf_coord[1], y = rod_inf_coord[2]) %>%
-      bind_rows(new_rod_coord_df)
+    rod_points_df <- tibble(
+      spine_level = factor("pelvis", levels = spine_levels_ordered, ordered = TRUE),
+      x           = pelvis_rod_point[1],
+      y           = pelvis_rod_point[2]
+    ) %>%
+      bind_rows(rod_points_df) %>%
+      arrange(spine_level)
     
-  }else if(str_to_lower(liv) == "s1" | str_to_lower(liv) == "sacrum"){
-    rod_sup <- c(filter(new_rod_coord_df, spine_level == "s1")$x, filter(new_rod_coord_df, spine_level == "s1")$y)
-    rod_inf <- s1_ip + rod_sup - s1_sp
+  } else {
+    # For any other LIV, extend distally past the LIV vertebra's ip
+    liv_post_df <- planned_spine_coord_df %>%
+      filter(spine_level == liv_lower, vert_point %in% c("sp", "ip"))
     
-    rod_inf_coord <- jh_get_point_along_line_function(coord_a = rod_sup, coord_b = rod_inf, percent_a_to_b = 0.2)
-    
-    new_rod_coord_df <- tibble(spine_level = "pelvis", x = rod_inf_coord[1], y = rod_inf_coord[2]) %>%
-      bind_rows(new_rod_coord_df)
+    if(nrow(liv_post_df) >= 2){
+      liv_sp <- c(filter(liv_post_df, vert_point == "sp")$x,
+                  filter(liv_post_df, vert_point == "sp")$y)
+      liv_ip <- c(filter(liv_post_df, vert_point == "ip")$x,
+                  filter(liv_post_df, vert_point == "ip")$y)
+      
+      liv_rod_point <- c(filter(rod_points_df, spine_level == liv_lower)$x,
+                         filter(rod_points_df, spine_level == liv_lower)$y)
+      
+      # Reflect liv_ip through liv_sp to get the distal extension direction
+      liv_distal_point <- liv_ip + liv_rod_point - liv_sp
+      
+      extension_percent <- if(liv_lower == "s1") 0.3 else 0.75
+
+      liv_extension <- jh_get_point_along_line_function(
+        coord_a        = liv_rod_point,
+        coord_b        = liv_distal_point,
+        percent_a_to_b = extension_percent
+      )
+      
+      # liv_extension <- liv_distal_point
+      
+      # Add as plain tibble row, arrange by y to maintain order
+      rod_points_df <- rod_points_df %>%
+        bind_rows(
+          tibble(
+            spine_level = factor(liv_lower,
+                                 levels = spine_levels_ordered,
+                                 ordered = TRUE),
+            x           = liv_extension[1],
+            y           = liv_extension[2]
+          )
+        ) %>%
+        arrange(y)
+    }
   }
   
-  # Fit a spline through the rod points
-  spline_fit <- smooth.spline(x = new_rod_coord_df$y, 
-                              y = new_rod_coord_df$x, 
-                              nknots = number_of_knots)
+  # ── Build the rod curve ───────────────────────────────────────────────────
+  y_seq <- seq(min(rod_points_df$y), max(rod_points_df$y), length.out = 200)
   
-  y_seq <- seq(min(new_rod_coord_df$y), max(new_rod_coord_df$y), length.out = 200)
+  if(contouring_percent == 0 || nrow(rod_points_df) < 3){
+    rod_coord_df <- tibble(
+      y = y_seq,
+      x = approx(
+        x    = c(min(rod_points_df$y), max(rod_points_df$y)),
+        y    = c(rod_points_df$x[which.min(rod_points_df$y)],
+                 rod_points_df$x[which.max(rod_points_df$y)]),
+        xout = y_seq
+      )$y
+    )
+  } else {
+    straight_x <- approx(
+      x    = c(min(rod_points_df$y), max(rod_points_df$y)),
+      y    = c(rod_points_df$x[which.min(rod_points_df$y)],
+               rod_points_df$x[which.max(rod_points_df$y)]),
+      xout = y_seq
+    )$y
+    
+    n_unique   <- length(unique(rod_points_df$y))
+    df_target  <- max(2, min(n_unique - 1, nrow(rod_points_df)))
+    
+    spline_x <- tryCatch({
+      fit <- smooth.spline(x = rod_points_df$y, y = rod_points_df$x, df = df_target)
+      predict(fit, y_seq)$y
+    }, warning = function(w){
+      fit <- smooth.spline(x = rod_points_df$y, y = rod_points_df$x, df = 2)
+      predict(fit, y_seq)$y
+    }, error = function(e){
+      approx(x = rod_points_df$y, y = rod_points_df$x, xout = y_seq)$y
+    })
+    
+    blend <- contouring_percent / 100
+    rod_coord_df <- tibble(
+      y = y_seq,
+      x = (1 - blend) * straight_x + blend * spline_x
+    )
+  }
   
-  rod_coord_df <- tibble(
-    y = y_seq,
-    x = predict(spline_fit, y_seq)$y
-  )
-  
-  # return_list <- list()
-  # 
-  # return_list$new_rod_coord_df <- new_rod_coord_df
-  # return_list$vert_sup_endplates_for_rod_df <- vert_sup_endplates_for_rod_df
-  # return_list$rod_coord_df <- rod_coord_df
-  
-  return(rod_coord_df)
-  
+  rod_coord_df
 }
+
+
+
+# ── Helper: generate rod template plot and save to file ──────────────────────
+generate_rod_template_pdf_function <- function(planned_vert_coord_df, rod_coord_df, rod_uiv, rod_liv, file) {
+  
+  spine_levels <- c("pelvis", "s1", "l5", "l4", "l3", "l2", "l1",
+                    "t12", "t11", "t10", "t9", "t8", "t7", "t6", "t5", 
+                    "t4", "t3", "t2", "t1",
+                    "c7", "c6", "c5", "c4", "c3", "c2", "c1")
+  
+  origin_x <- rod_coord_df$x[[1]]
+  origin_y <- rod_coord_df$y[[1]]
+  
+  instrumented_vert_centered_df <- planned_vert_coord_df %>%
+    mutate(spine_level = factor(spine_level, levels = spine_levels, ordered = TRUE)) %>%
+    group_by(spine_level) %>%
+    filter(spine_level >= str_to_lower(rod_liv) & spine_level <= str_to_lower(rod_uiv)) %>%
+    mutate(x = x - origin_x, y = y - origin_y)
+  
+  rod_coord_centered_df <- rod_coord_df %>%
+    mutate(x = x - origin_x, y = y - origin_y)
+  
+  # ── Shift so bottom-left is (0, 0) ───────────────────────────────────────
+  all_x <- c(rod_coord_centered_df$x, instrumented_vert_centered_df$x)
+  all_y <- c(rod_coord_centered_df$y, instrumented_vert_centered_df$y)
+  
+  x_shift <- floor(min(all_x, na.rm = TRUE) / 20) * 20
+  y_shift <- floor(min(all_y, na.rm = TRUE) / 50) * 50
+  
+  instrumented_vert_centered_df <- instrumented_vert_centered_df %>%
+    mutate(x = x - x_shift, y = y - y_shift)
+  
+  rod_coord_centered_df <- rod_coord_centered_df %>%
+    mutate(x = x - x_shift, y = y - y_shift)
+  
+  # ── Grid dimensions (now starting from 0) ────────────────────────────────
+  x_range <- range(c(rod_coord_centered_df$x, instrumented_vert_centered_df$x), na.rm = TRUE)
+  y_range <- range(c(rod_coord_centered_df$y, instrumented_vert_centered_df$y), na.rm = TRUE)
+  
+  x_grid_min <- 0
+  y_grid_min <- 0
+  x_grid_max <- ceiling(x_range[[2]] / 20) * 20
+  y_grid_max <- ceiling(y_range[[2]] / 50) * 50
+  
+  grid_corners_df <- expand_grid(x = c(x_grid_min, x_grid_max), y = c(y_grid_min, y_grid_max))
+  
+  y_gridline_df   <- tibble(x_min = x_grid_min, x_max = x_grid_max,
+                            y = seq(y_grid_min, y_grid_max, by = 50))
+  x_gridline_df   <- tibble(x = seq(x_grid_min, x_grid_max, by = 50),
+                            y_min = y_grid_min, y_max = y_grid_min + 15)
+  
+  spine_levels_labels_df <- instrumented_vert_centered_df %>%
+    group_by(spine_level) %>%
+    summarise(center_x = mean(x), center_y = mean(y), .groups = "drop") %>%
+    mutate(spine_level = str_to_upper(spine_level))
+  
+  rod_plot <- ggplot() +
+    geom_polygon(data = instrumented_vert_centered_df,
+                 aes(x = x, y = y, group = spine_level),
+                 color = "grey50", fill = NA, alpha = 0.3) +
+    geom_segment(data = y_gridline_df,
+                 aes(x = x_min, xend = x_max, y = y, yend = y),
+                 color = "grey75", linetype = "dashed") +
+    draw_text(text = paste0(y_gridline_df$y, "mm"),
+              x = x_grid_max - 5,
+              y = y_gridline_df$y + 3,
+              size = 9, hjust = 1) +
+    geom_segment(data = x_gridline_df,
+                 aes(x = x, xend = x, y = y_min, yend = y_max),
+                 color = "grey75", linetype = "dashed") +
+    draw_text(text = paste0(x_gridline_df$x, "mm"),
+              x = x_gridline_df$x, y = x_gridline_df$y_max + 5, size = 7) +
+    draw_text(text = spine_levels_labels_df$spine_level,
+              x    = spine_levels_labels_df$center_x,
+              y    = spine_levels_labels_df$center_y, size = 8) +
+    geom_path(data = rod_coord_centered_df,
+              aes(x = x, y = y),
+              color = "blue", linewidth = 2, lineend = "round", linejoin = "round") +
+    geom_point(data = grid_corners_df, aes(x = x, y = y), color = "red") +
+    coord_fixed(expand = FALSE,
+                xlim = c(x_grid_min, x_grid_max),
+                ylim = c(y_grid_min, y_grid_max)) +
+    theme_void()
+  
+  plot_width_in  <- diff(c(x_grid_min, x_grid_max)) / 25.4
+  plot_height_in <- diff(c(y_grid_min, y_grid_max)) / 25.4
+  
+
+  ggsave(file,
+         plot      = rod_plot,
+         device    = cairo_pdf,
+         width     = plot_width_in,
+         height    = plot_height_in,
+         units     = "in",
+         dpi       = 300,
+         limitsize = FALSE)
+}
+
+# generate_rod_template_pdf <- function(planned_vert_coord_df, rod_coord_df, rod_uiv, rod_liv, file) {
+#   
+#   spine_levels <- c("pelvis", "s1", "l5", "l4", "l3", "l2", "l1",
+#                     "t12", "t11", "t10", "t9", "t8", "t7", "t6", "t5", 
+#                     "t4", "t3", "t2", "t1",
+#                     "c7", "c6", "c5", "c4", "c3", "c2", "c1")
+#   
+#   origin_x <- rod_coord_df$x[[1]]
+#   origin_y <- rod_coord_df$y[[1]]
+#   
+#   instrumented_vert_centered_df <- planned_vert_coord_df %>%
+#     mutate(spine_level = factor(spine_level, levels = spine_levels, ordered = TRUE)) %>%
+#     group_by(spine_level) %>%
+#     filter(spine_level >= str_to_lower(rod_liv) & spine_level <= str_to_lower(rod_uiv)) %>%
+#     mutate(x = x - origin_x, y = y - origin_y)
+#   
+#   rod_coord_centered_df <- rod_coord_df %>%
+#     mutate(x = x - origin_x, y = y - origin_y)
+#   
+#   x_range <- range(c(rod_coord_centered_df$x, instrumented_vert_centered_df$x), na.rm = TRUE)
+#   y_range <- range(c(rod_coord_centered_df$y, instrumented_vert_centered_df$y), na.rm = TRUE)
+#   
+#   y_grid_breaks <- 50
+#   y_grid_max <- ceiling(y_range[[2]] / y_grid_breaks) * y_grid_breaks
+#   y_grid_min <- floor(y_range[[1]]   / y_grid_breaks) * y_grid_breaks
+#   x_grid_max <- ceiling(x_range[[2]] / 20) * 20
+#   x_grid_min <- floor(x_range[[1]]   / 20) * 20
+#   
+#   grid_corners_df    <- expand_grid(x = c(x_grid_min, x_grid_max), y = c(y_grid_min, y_grid_max))
+#   y_gridline_df      <- tibble(x_min = x_grid_min, x_max = x_grid_max,
+#                                y = seq(y_grid_min, y_grid_max, by = 50))
+#   x_gridline_df      <- tibble(x = seq(x_grid_min, x_grid_max, by = 40),
+#                                y_min = y_grid_min, y_max = y_grid_min + 25) %>% slice(-1)
+#   
+#   spine_levels_labels_df <- instrumented_vert_centered_df %>%
+#     group_by(spine_level) %>%
+#     summarise(center_x = mean(x), center_y = mean(y), .groups = "drop") %>%
+#     mutate(spine_level = str_to_upper(spine_level))
+#   
+#   rod_plot <- ggplot() +
+#     geom_polygon(data = instrumented_vert_centered_df,
+#                  aes(x = x, y = y, group = spine_level),
+#                  color = "grey50", fill = NA, alpha = 0.3) +
+#     geom_segment(data = y_gridline_df,
+#                  aes(x = x_min, xend = x_max, y = y, yend = y),
+#                  color = "grey75", linetype = "dashed") +
+#     draw_text(text = paste0(y_gridline_df$y, "mm"),
+#               x = y_gridline_df$x_min + 20, y = y_gridline_df$y, size = 7) +
+#     geom_segment(data = x_gridline_df,
+#                  aes(x = x, xend = x, y = y_min, yend = y_max),
+#                  color = "grey75", linetype = "dashed") +
+#     draw_text(text = paste0(x_gridline_df$x, "mm"),
+#               x = x_gridline_df$x, y = x_gridline_df$y_max, size = 7) +
+#     draw_text(text = spine_levels_labels_df$spine_level,
+#               x = spine_levels_labels_df$center_x,
+#               y = spine_levels_labels_df$center_y, size = 8) +
+#     geom_path(data = rod_coord_centered_df,
+#               aes(x = x, y = y),
+#               color = "blue", linewidth = 2, lineend = "round", linejoin = "round") +
+#     geom_point(data = grid_corners_df, aes(x = x, y = y), color = "red") +
+#     coord_fixed(expand = FALSE,
+#                 xlim = c(x_grid_min, x_grid_max),
+#                 ylim = c(y_grid_min, y_grid_max)) +
+#     theme_void()
+#   
+#   plot_width_in  <- diff(c(x_grid_min, x_grid_max)) / 25.4
+#   plot_height_in <- diff(c(y_grid_min, y_grid_max)) / 25.4
+#   
+#   ggsave(file,
+#          plot      = rod_plot,
+#          device    = cairo_pdf,
+#          width     = plot_width_in,
+#          height    = plot_height_in,
+#          units     = "in",
+#          dpi       = 300,
+#          limitsize = FALSE)
+# }
+
+
+# jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
+#                                                   uiv = "T4", 
+#                                                   liv = "Pelvis",
+#                                                   spine_orientation = "left",
+#                                                   number_of_knots = 5){
+#   
+#   if(number_of_knots < 4){
+#     number_of_knots <- 4
+#   }
+#   if(number_of_knots > 10){
+#     number_of_knots <- 10
+#   }
+#   
+#   spine_level_numeric_df <-  planned_spine_coord_df %>%
+#     select(spine_level) %>%
+#     distinct()%>%
+#     mutate(spine_level = fct_inorder(spine_level)) %>%
+#     mutate(spine_level_numeric = as.numeric(spine_level)) 
+#   
+#   ### UIV first ####
+#   uiv_numeric <- filter(spine_level_numeric_df, spine_level == str_to_lower(uiv))$spine_level_numeric
+#   
+#   
+#   ### LIV NOW ###
+#   if(str_to_lower(liv) == "pelvis" | str_to_lower(liv) == "s1" | str_to_lower(liv) == "sacrum"){
+#     
+#     liv_numeric <- 0
+#     
+#     s1_post_points_df <- planned_spine_coord_df %>%
+#       filter(spine_level == "s1") %>%
+#       filter(vert_point %in% c("sp", "ip"))
+#     
+#     s1_sp <- c(filter(s1_post_points_df, vert_point == "sp")$x, filter(s1_post_points_df, vert_point == "sp")$y)
+#     s1_ip <- c(filter(s1_post_points_df, vert_point == "ip")$x, filter(s1_post_points_df, vert_point == "ip")$y)
+#     
+#   }else{
+#     liv_numeric <- filter(spine_level_numeric_df, spine_level == str_to_lower(liv))$spine_level_numeric
+#   }
+#   
+#   # levels_spanned <- uiv_numeric - liv_numeric
+#   # 
+#   # if(number_of_knots > levels_spanned){
+#   #   print("yes")
+#   #   # number_of_knots <- levels_spanned
+#   # }
+#   
+#   ### NOW GET THE DF ###
+#   vert_sup_endplates_for_rod_df <- planned_spine_coord_df %>%
+#     mutate(spine_level = fct_inorder(spine_level)) %>%
+#     mutate(spine_level_numeric = as.numeric(spine_level)) %>%
+#     filter(between(spine_level_numeric, liv_numeric, uiv_numeric)) %>%
+#     filter(vert_point %in% c("sa", "sp"))
+#   
+#   new_rod_coord_df <- vert_sup_endplates_for_rod_df %>%
+#     pivot_wider(names_from = vert_point, values_from = c(x, y)) %>%
+#     filter(!is.na(x_sp), !is.na(x_sa)) %>%
+#     mutate(
+#       x = 2 * x_sp - x_sa,
+#       y = 2 * y_sp - y_sa
+#     ) %>%
+#     select(spine_level, x, y) 
+#   
+#   
+#   if(str_to_lower(liv) == "pelvis"){
+#     rod_sup <- c(filter(new_rod_coord_df, spine_level == "s1")$x, filter(new_rod_coord_df, spine_level == "s1")$y)
+#     rod_inf <- s1_ip + rod_sup - s1_sp
+#     
+#     rod_inf_coord <- jh_get_point_along_line_function(coord_a = rod_sup, coord_b = rod_inf, percent_a_to_b = 0.4)
+#     
+#     new_rod_coord_df <- tibble(spine_level = "pelvis", x = rod_inf_coord[1], y = rod_inf_coord[2]) %>%
+#       bind_rows(new_rod_coord_df)
+#     
+#   }else if(str_to_lower(liv) == "s1" | str_to_lower(liv) == "sacrum"){
+#     rod_sup <- c(filter(new_rod_coord_df, spine_level == "s1")$x, filter(new_rod_coord_df, spine_level == "s1")$y)
+#     rod_inf <- s1_ip + rod_sup - s1_sp
+#     
+#     rod_inf_coord <- jh_get_point_along_line_function(coord_a = rod_sup, coord_b = rod_inf, percent_a_to_b = 0.2)
+#     
+#     new_rod_coord_df <- tibble(spine_level = "pelvis", x = rod_inf_coord[1], y = rod_inf_coord[2]) %>%
+#       bind_rows(new_rod_coord_df)
+#   }
+#   
+#   # # Clamp knots to valid range
+#   # n_unique <- length(unique(new_rod_coord_df$y))
+#   # number_of_knots <- min(number_of_knots, n_unique - 1)
+#   # number_of_knots <- max(number_of_knots, 2)
+#   # 
+#   # # Fit a spline through the rod points
+#   # spline_fit <- smooth.spline(x = new_rod_coord_df$y, 
+#   #                             y = new_rod_coord_df$x, 
+#   #                             nknots = number_of_knots)
+#   # 
+#   # y_seq <- seq(min(new_rod_coord_df$y), max(new_rod_coord_df$y), length.out = 200)
+#   # 
+#   # rod_coord_df <- tibble(
+#   #   y = y_seq,
+#   #   x = predict(spline_fit, y_seq)$y
+#   # )
+#   # Clamp to valid range
+#   n_points <- nrow(new_rod_coord_df)
+#   n_unique <- length(unique(new_rod_coord_df$y))
+#   
+#   # df must be between 2 and n_unique
+#   df_target <- min(number_of_knots, n_unique - 1)
+#   df_target <- max(df_target, 2)
+#   
+#   # Fit spline with fallback
+#   spline_fit <- tryCatch({
+#     smooth.spline(
+#       x  = new_rod_coord_df$y,
+#       y  = new_rod_coord_df$x,
+#       df = df_target
+#     )
+#   }, warning = function(w){
+#     # On warning, fall back to simpler fit
+#     smooth.spline(
+#       x  = new_rod_coord_df$y,
+#       y  = new_rod_coord_df$x,
+#       df = 2
+#     )
+#   }, error = function(e){
+#     # On error, fit a straight line via lm and fake a spline-like object
+#     # by using approx interpolation instead
+#     NULL
+#   })
+#   
+#   # If spline failed entirely, fall back to linear interpolation
+#   if(is.null(spline_fit)){
+#     y_seq <- seq(min(new_rod_coord_df$y), max(new_rod_coord_df$y), length.out = 200)
+#     rod_coord_df <- tibble(
+#       y = y_seq,
+#       x = approx(x = new_rod_coord_df$y, y = new_rod_coord_df$x, xout = y_seq)$y
+#     )
+#   } else {
+#     y_seq <- seq(min(new_rod_coord_df$y), max(new_rod_coord_df$y), length.out = 200)
+#     rod_coord_df <- tibble(
+#       y = y_seq,
+#       x = predict(spline_fit, y_seq)$y
+#     )
+#   }
+#   
+#   # return_list <- list()
+#   # 
+#   # return_list$new_rod_coord_df <- new_rod_coord_df
+#   # return_list$vert_sup_endplates_for_rod_df <- vert_sup_endplates_for_rod_df
+#   # return_list$rod_coord_df <- rod_coord_df
+#   
+#   # return_list$uiv_numeric <- uiv_numeric
+#   # return_list$liv_numeric <- liv_numeric
+#   
+#   return(rod_coord_df)
+#   
+# }
 
 # 
 # jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
