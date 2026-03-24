@@ -36,8 +36,13 @@ source("jh_constructing_spine_from_coordinates_new.R", local = TRUE)
 
 
 # In global.R
+# email_credentials <- if(Sys.getenv("SHINY_ENV") == "production"){
+#   blastula::creds_file("/srv/shiny-server/alignment_planning/.blastula_email_creds")
+# } else {
+#   blastula::creds_key("email_creds")
+# }
 email_credentials <- if(Sys.getenv("SHINY_ENV") == "production"){
-  blastula::creds_file("/srv/shiny-server/alignment_planning/.blastula_email_creds")
+  blastula::creds_file("/etc/shiny-apps/secrets/.blastula_email_creds")
 } else {
   blastula::creds_key("email_creds")
 }
