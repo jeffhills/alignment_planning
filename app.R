@@ -1458,14 +1458,22 @@ server <- function(input, output, session) {
                         fem_head_to_s1_x_length <- jh_calculate_distance_between_2_points_function(point_1 = fem_head_center,
                                                                                                    point_2 = c(s1_center[[1]], fem_head_center[[2]])) ## opposite
                         
+                        # pt_orientation_modifier <- case_when(
+                        #   spine_orientation() == "left" & fem_head_center[[1]] < s1_center[[1]] ~ 1,
+                        #   spine_orientation() == "left" & fem_head_center[[1]] > s1_center[[1]] ~ -1,
+                        #   spine_orientation() == "right" & fem_head_center[[1]] > s1_center[[1]] ~ 1,
+                        #   spine_orientation() == "right" & fem_head_center[[1]] < s1_center[[1]] ~ -1
+                        # )
                         pt_orientation_modifier <- case_when(
-                          spine_orientation() == "left" & fem_head_center[[1]] < s1_center[[1]] ~ 1,
-                          spine_orientation() == "left" & fem_head_center[[1]] > s1_center[[1]] ~ -1,
-                          spine_orientation() == "right" & fem_head_center[[1]] > s1_center[[1]] ~ 1,
-                          spine_orientation() == "right" & fem_head_center[[1]] < s1_center[[1]] ~ -1
+                          spine_orientation() == "left"  & fem_head_center[[1]] > s1_center[[1]] ~ 1,   # facing left, normal PT
+                          spine_orientation() == "left"  & fem_head_center[[1]] < s1_center[[1]] ~ -1,  # facing left, anteverted
+                          spine_orientation() == "right" & fem_head_center[[1]] < s1_center[[1]] ~ 1,   # facing right, normal PT
+                          spine_orientation() == "right" & fem_head_center[[1]] > s1_center[[1]] ~ -1   # facing right, anteverted
                         )
                         
                         alignment_parameters_reactivevalues_list$pelvic_tilt <- asin(fem_head_to_s1_x_length/fem_head_to_s1_length)*180/pi*pt_orientation_modifier
+                        
+                        print(paste("PT: ", alignment_parameters_reactivevalues_list$pelvic_tilt, "and.... PT Modifier: ", pt_orientation_modifier))
                         
                         ### COMPUTE SS ###
                         s1_length <- jh_calculate_distance_between_2_points_function(point_1 = c(click_coord_reactive_list$coords$s1_anterior_superior$x, click_coord_reactive_list$coords$s1_anterior_superior$y),
@@ -2078,13 +2086,22 @@ server <- function(input, output, session) {
   # ── Rod construction ─────────────────────────────────────────────────────────
   observeEvent(list(input$add_rod, input$rod_uiv, input$rod_liv, input$rod_contouring), ignoreInit = TRUE, {
     if(input$add_rod){
+      if(nrow(spine_segmental_planning_df$pso_df) > 0){
+        pso_vec <- spine_segmental_planning_df$pso_df$level
+      }else{
+        pso_vec <- character()
+      }
+      # print(pso_vec)
+      
       spine_simulation_planning_reactive_list$rod_coord_df <- jh_construct_rod_coordinates_function(
         planned_spine_coord_df = spine_build_list_reactivevalues$planned_spine_list$vert_coord_df,
         uiv                    = input$rod_uiv,
         liv                    = input$rod_liv,
+        pso_vector = pso_vec,
         spine_orientation      = spine_orientation(),
         contouring_percent        = input$rod_contouring
       )
+      # print(paste(dput(spine_simulation_planning_reactive_list$rod_coord_df)))
     } else {
       spine_simulation_planning_reactive_list$rod_coord_df <- tibble()
     }

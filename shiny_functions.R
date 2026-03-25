@@ -422,6 +422,7 @@ update_spine_segmental_planning_table_observe_button_function <- function(spine_
 jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
                                                   uiv = "T4",
                                                   liv = "Pelvis",
+                                                  pso_vector = c(),
                                                   spine_orientation = "left",
                                                   contouring_percent = 100) {
   
@@ -445,6 +446,10 @@ jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
   
   instrumented_levels <- spine_levels_ordered[liv_idx:uiv_idx]
   
+  if(length(pso_vector)>0){
+    instrumented_levels <- setdiff(instrumented_levels, str_to_lower(pso_vector))
+  }
+  
   # ── Get s1 posterior points for iliac extension ───────────────────────────
   s1_post_df <- planned_spine_coord_df %>%
     filter(spine_level == "s1", vert_point %in% c("sp", "ip"))
@@ -455,83 +460,191 @@ jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
              filter(s1_post_df, vert_point == "ip")$y)
   
   # ── Compute rod contact point for each instrumented vertebra ──────────────
-  rod_points_df <- planned_spine_coord_df %>%
-    filter(spine_level %in% instrumented_levels,
-           vert_point %in% c("sa", "sp")) %>%
-    pivot_wider(names_from = vert_point, values_from = c(x, y)) %>%
-    filter(!is.na(x_sp), !is.na(x_sa)) %>%
-    mutate(
-      rod_x = 2 * x_sp - x_sa,
-      rod_y = 2 * y_sp - y_sa
-    ) %>%
-    mutate(spine_level = factor(spine_level,
-                                levels = spine_levels_ordered,
-                                ordered = TRUE)) %>%
-    arrange(spine_level) %>%
-    select(spine_level, x = rod_x, y = rod_y)
+  # rod_points_df <- planned_spine_coord_df %>%
+  #   filter(spine_level %in% instrumented_levels,
+  #          vert_point %in% c("sa", "sp")) %>%
+  #   pivot_wider(names_from = vert_point, values_from = c(x, y)) %>%
+  #   filter(!is.na(x_sp), !is.na(x_sa)) %>%
+  #   mutate(
+  #     rod_x = 2 * x_sp - x_sa,
+  #     rod_y = 2 * y_sp - y_sa
+  #   ) %>%
+  #   mutate(spine_level = factor(spine_level,
+  #                               levels = spine_levels_ordered,
+  #                               ordered = TRUE)) %>%
+  #   arrange(spine_level) %>%
+  #   select(spine_level, x = rod_x, y = rod_y)
+  # 
+  # # ── Add distal extension depending on LIV ────────────────────────────────
+  # if(liv_lower == "pelvis"){
+  #   # Extend to iliac screw position
+  #   s1_rod_point <- c(filter(rod_points_df, spine_level == "s1")$x,
+  #                     filter(rod_points_df, spine_level == "s1")$y)
+  #   
+  #   pelvis_rod_point <- s1_ip + s1_rod_point - s1_sp
+  #   pelvis_rod_point <- jh_get_point_along_line_function(
+  #     coord_a        = s1_rod_point,
+  #     coord_b        = pelvis_rod_point,
+  #     percent_a_to_b = 0.4
+  #   )
+  #   
+  #   rod_points_df <- tibble(
+  #     spine_level = factor("pelvis", levels = spine_levels_ordered, ordered = TRUE),
+  #     x           = pelvis_rod_point[1],
+  #     y           = pelvis_rod_point[2]
+  #   ) %>%
+  #     bind_rows(rod_points_df) %>%
+  #     arrange(spine_level)
+  #   
+  # } else {
+  #   # For any other LIV, extend distally past the LIV vertebra's ip
+  #   liv_post_df <- planned_spine_coord_df %>%
+  #     filter(spine_level == liv_lower, vert_point %in% c("sp", "ip"))
+  #   
+  #   if(nrow(liv_post_df) >= 2){
+  #     liv_sp <- c(filter(liv_post_df, vert_point == "sp")$x,
+  #                 filter(liv_post_df, vert_point == "sp")$y)
+  #     liv_ip <- c(filter(liv_post_df, vert_point == "ip")$x,
+  #                 filter(liv_post_df, vert_point == "ip")$y)
+  #     
+  #     liv_rod_point <- c(filter(rod_points_df, spine_level == liv_lower)$x,
+  #                        filter(rod_points_df, spine_level == liv_lower)$y)
+  #     
+  #     # Reflect liv_ip through liv_sp to get the distal extension direction
+  #     liv_distal_point <- liv_ip + liv_rod_point - liv_sp
+  #     
+  #     extension_percent <- if(liv_lower == "s1") 0.5 else 0.75
+  # 
+  #     liv_extension <- jh_get_point_along_line_function(
+  #       coord_a        = liv_rod_point,
+  #       coord_b        = liv_distal_point,
+  #       percent_a_to_b = extension_percent
+  #     )
+  #     
+  #     # liv_extension <- liv_distal_point
+  #     
+  #     # Add as plain tibble row, arrange by y to maintain order
+  #     rod_points_df <- rod_points_df %>%
+  #       bind_rows(
+  #         tibble(
+  #           spine_level = factor(liv_lower,
+  #                                levels = spine_levels_ordered,
+  #                                ordered = TRUE),
+  #           x           = liv_extension[1],
+  #           y           = liv_extension[2]
+  #         )
+  #       ) %>%
+  #       arrange(y)
+  #   }
+  # }
+  # ── Compute rod contact point for each instrumented vertebra ──────────────
   
-  # ── Add distal extension depending on LIV ────────────────────────────────
-  if(liv_lower == "pelvis"){
-    # Extend to iliac screw position
-    s1_rod_point <- c(filter(rod_points_df, spine_level == "s1")$x,
-                      filter(rod_points_df, spine_level == "s1")$y)
+  if(liv_lower %in% c("s1", "pelvis")){
+    s1_coord_list <- planned_spine_coord_df%>%
+      filter(spine_level == "s1") %>%
+      mutate(xy_coord = map2(.x = x, .y = y, .f = ~ c(.x, .y))) %>%
+      pull(xy_coord)
     
-    pelvis_rod_point <- s1_ip + s1_rod_point - s1_sp
-    pelvis_rod_point <- jh_get_point_along_line_function(
-      coord_a        = s1_rod_point,
-      coord_b        = pelvis_rod_point,
-      percent_a_to_b = 0.4
-    )
+    names(s1_coord_list) <- planned_spine_coord_df%>%
+      filter(spine_level == "s1") %>%
+      pull(vert_point)
     
-    rod_points_df <- tibble(
-      spine_level = factor("pelvis", levels = spine_levels_ordered, ordered = TRUE),
-      x           = pelvis_rod_point[1],
-      y           = pelvis_rod_point[2]
-    ) %>%
-      bind_rows(rod_points_df) %>%
-      arrange(spine_level)
+    s1_coord_list$anterior_inferior_to_sacrum_point <- s1_coord_list$sa + s1_coord_list$ip - s1_coord_list$sp
     
-  } else {
-    # For any other LIV, extend distally past the LIV vertebra's ip
-    liv_post_df <- planned_spine_coord_df %>%
-      filter(spine_level == liv_lower, vert_point %in% c("sp", "ip"))
+    if(liv_lower == "s1"){
+      sacrum_percent_to_extend <- 0.25
+    }else if(liv_lower == "pelvis"){
+      sacrum_percent_to_extend <- 0.4
+    }
+    sacrum_post_mid_point <- jh_get_point_along_line_function(coord_a = s1_coord_list$sp, 
+                                                              coord_b = s1_coord_list$ip, 
+                                                              percent_a_to_b = sacrum_percent_to_extend)
+    sacrum_ant_mid_point <- jh_get_point_along_line_function(coord_a = s1_coord_list$sa, 
+                                                             coord_b = s1_coord_list$anterior_inferior_to_sacrum_point, 
+                                                             percent_a_to_b = sacrum_percent_to_extend)
     
-    if(nrow(liv_post_df) >= 2){
-      liv_sp <- c(filter(liv_post_df, vert_point == "sp")$x,
-                  filter(liv_post_df, vert_point == "sp")$y)
-      liv_ip <- c(filter(liv_post_df, vert_point == "ip")$x,
-                  filter(liv_post_df, vert_point == "ip")$y)
-      
-      liv_rod_point <- c(filter(rod_points_df, spine_level == liv_lower)$x,
-                         filter(rod_points_df, spine_level == liv_lower)$y)
-      
-      # Reflect liv_ip through liv_sp to get the distal extension direction
-      liv_distal_point <- liv_ip + liv_rod_point - liv_sp
-      
-      extension_percent <- if(liv_lower == "s1") 0.3 else 0.75
-
-      liv_extension <- jh_get_point_along_line_function(
-        coord_a        = liv_rod_point,
-        coord_b        = liv_distal_point,
-        percent_a_to_b = extension_percent
-      )
-      
-      # liv_extension <- liv_distal_point
-      
-      # Add as plain tibble row, arrange by y to maintain order
-      rod_points_df <- rod_points_df %>%
-        bind_rows(
-          tibble(
-            spine_level = factor(liv_lower,
-                                 levels = spine_levels_ordered,
-                                 ordered = TRUE),
-            x           = liv_extension[1],
-            y           = liv_extension[2]
-          )
-        ) %>%
-        arrange(y)
+    liv_inferior_rod_points_df <- tibble(spine_level = "s1", 
+                                         vert_point = c("ip", "ia"), 
+                                         x = c(sacrum_post_mid_point[1], 
+                                               sacrum_ant_mid_point[1]),
+                                         y = c(sacrum_post_mid_point[2], 
+                                               sacrum_ant_mid_point[2]))%>% 
+      pivot_wider(names_from = vert_point, values_from = c(x, y)) %>%
+      filter(!is.na(x_ip), !is.na(x_ia)) %>%
+      mutate(
+        rod_x = 2 * x_ip - x_ia,
+        rod_y = 2 * y_ip - y_ia
+      ) %>%
+      mutate(spine_level = factor(spine_level,
+                                  levels = spine_levels_ordered,
+                                  ordered = TRUE)) %>%
+      arrange(spine_level) %>%
+      select(spine_level, x = rod_x, y = rod_y)
+    
+  }else{
+    liv_inferior_rod_points_df <- planned_spine_coord_df%>%
+      filter(spine_level == liv_lower, vert_point %in% c("ip", "ia"))  %>% 
+      pivot_wider(names_from = vert_point, values_from = c(x, y)) %>%
+      filter(!is.na(x_ip), !is.na(x_ia)) %>%
+      mutate(
+        rod_x = 2 * x_ip - x_ia,
+        rod_y = 2 * y_ip - y_ia
+      ) %>%
+      mutate(spine_level = factor(spine_level,
+                                  levels = spine_levels_ordered,
+                                  ordered = TRUE)) %>%
+      arrange(spine_level) %>%
+      select(spine_level, x = rod_x, y = rod_y)
+  }
+  
+  
+  
+  
+  rod_points_df <- liv_inferior_rod_points_df %>%
+    bind_rows( planned_spine_coord_df %>%
+                 filter(spine_level %in% instrumented_levels,
+                        vert_point %in% c("sa", "sp"))  %>%
+                 pivot_wider(names_from = vert_point, values_from = c(x, y)) %>%
+                 filter(!is.na(x_sp), !is.na(x_sa)) %>%
+                 mutate(
+                   rod_x = 2 * x_sp - x_sa,
+                   rod_y = 2 * y_sp - y_sa
+                 ) %>%
+                 mutate(spine_level = factor(spine_level,
+                                             levels = spine_levels_ordered,
+                                             ordered = TRUE)) %>%
+                 arrange(spine_level) %>%
+                 select(spine_level, x = rod_x, y = rod_y))
+  
+  
+  # ── Thin points that are too close together in y ──────────────────────────
+  # Minimum separation: 5% of total y range
+  min_sep <- diff(range(rod_points_df$y)) * 0.05
+  min_sep <- max(min_sep, 1)  # never less than 1mm
+  
+  # Iteratively remove points that are too close to their neighbor
+  thinned <- rod_points_df %>% arrange(y)
+  keep    <- rep(TRUE, nrow(thinned))
+  
+  for(i in 2:nrow(thinned)){
+    if(!keep[i - 1]) next
+    if(abs(thinned$y[i] - thinned$y[which(keep)[max(which(keep < i))]]) < min_sep){
+      # Keep the average position, drop the second point
+      keep[i] <- FALSE
     }
   }
+  
+  # Always keep first and last
+  keep[1]            <- TRUE
+  keep[nrow(thinned)] <- TRUE
+  
+  rod_points_df <- thinned[keep, ]
+  
+  # ── Average duplicate y values ────────────────────────────────────────────
+  rod_points_df <- rod_points_df %>%
+    group_by(y = round(y, 1)) %>%
+    summarise(x = mean(x), .groups = "drop") %>%
+    arrange(y)
   
   # ── Build the rod curve ───────────────────────────────────────────────────
   y_seq <- seq(min(rod_points_df$y), max(rod_points_df$y), length.out = 200)
@@ -574,7 +687,13 @@ jh_construct_rod_coordinates_function <- function(planned_spine_coord_df,
     )
   }
   
-  rod_coord_df
+  # returnlist <- list()
+  # 
+  # returnlist$rod_coord_df <-  rod_coord_df
+  # 
+  # returnlist$rod_points_df <- rod_points_df
+  
+  return(rod_coord_df)
 }
 
 
