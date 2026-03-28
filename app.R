@@ -773,7 +773,7 @@ ui <- dashboardPage(
                                                 multiple = TRUE,
                                                 options  = pickerOptions(container = "body"),
                                                 width    = "100%")),
-                             column(6)
+                             column(6, uiOutput("thoracic_pso_inputs"))
                            )
                        ),
                        
@@ -1445,7 +1445,9 @@ server <- function(input, output, session) {
                       
                       alignment_parameters_list <- reactiveValuesToList(alignment_parameters_reactivevalues_list)
                       
-                      if((any(names(alignment_parameters_list) == "pelvic_incidence") == FALSE) & nrow(filter(click_coordinates_df_reactive(), str_detect(spine_point, "s1")))>1){
+                      if(nrow(click_coordinates_df_reactive())>2){
+                      
+                      # if((any(names(alignment_parameters_list) == "pelvic_incidence") == FALSE) & nrow(filter(click_coordinates_df_reactive(), str_detect(spine_point, "s1")))>1){
                         fem_head_center <- c(click_coord_reactive_list$coords$fem_head_center$x, click_coord_reactive_list$coords$fem_head_center$y)
                         
                         s1_center <- c((click_coord_reactive_list$coords$s1_anterior_superior$x + click_coord_reactive_list$coords$s1_posterior_superior$x)/2,
@@ -1458,31 +1460,23 @@ server <- function(input, output, session) {
                         fem_head_to_s1_x_length <- jh_calculate_distance_between_2_points_function(point_1 = fem_head_center,
                                                                                                    point_2 = c(s1_center[[1]], fem_head_center[[2]])) ## opposite
                         
-                        # pt_orientation_modifier <- case_when(
-                        #   spine_orientation() == "left" & fem_head_center[[1]] < s1_center[[1]] ~ 1,
-                        #   spine_orientation() == "left" & fem_head_center[[1]] > s1_center[[1]] ~ -1,
-                        #   spine_orientation() == "right" & fem_head_center[[1]] > s1_center[[1]] ~ 1,
-                        #   spine_orientation() == "right" & fem_head_center[[1]] < s1_center[[1]] ~ -1
-                        # )
-                        # pt_orientation_modifier <- case_when(
-                        #   spine_orientation() == "left"  & fem_head_center[[1]] > s1_center[[1]] ~ 1,   # facing left, normal PT
-                        #   spine_orientation() == "left"  & fem_head_center[[1]] < s1_center[[1]] ~ -1,  # facing left, anteverted
-                        #   spine_orientation() == "right" & fem_head_center[[1]] < s1_center[[1]] ~ 1,   # facing right, normal PT
-                        #   spine_orientation() == "right" & fem_head_center[[1]] > s1_center[[1]] ~ -1   # facing right, anteverted
-                        # )
+   
                         if(spine_orientation() == "left"){
+                          print(paste("Spine orientation computed as left"))
                           if(fem_head_center[[1]] < s1_center[[1]]){
                             pt_orientation_modifier <- 1 # "normal"
                           }else{
                             pt_orientation_modifier <- -1 # "anteverted"
                           }
                         }else{
+                          print(paste("Spine orientation computed as right"))
                           if(fem_head_center[[1]] > s1_center[[1]]){
                             pt_orientation_modifier <- 1 # "normal"
                           }else{
                             pt_orientation_modifier <- -1 #"anteverted"
                           }
                         }
+                        print(paste("pt_orientation_modifier", pt_orientation_modifier))
                         
                         alignment_parameters_reactivevalues_list$pelvic_tilt <- asin(fem_head_to_s1_x_length/fem_head_to_s1_length)*180/pi*pt_orientation_modifier
                         
@@ -2006,6 +2000,19 @@ server <- function(input, output, session) {
     ))
   })
   
+  output$thoracic_pso_inputs <- renderUI({
+    req(input$thoracic_pso)  # Ensure there's a selection before rendering
+    
+    # Generate numericInputs dynamically using purrr::map
+    map(input$thoracic_pso, ~ numericInput(
+      inputId = paste0(tolower(.x), "_pso_value"), 
+      label = paste(.x, "PSO Value"), 
+      value = 30, 
+      min = 0, 
+      max = 50
+    ))
+  })
+  
   ####### PSO LIST ###########
 
   pso_values <- reactive({
@@ -2097,7 +2104,7 @@ server <- function(input, output, session) {
   
   
   # ── Rod construction ─────────────────────────────────────────────────────────
-  observeEvent(list(input$add_rod, input$rod_uiv, input$rod_liv, input$rod_contouring), ignoreInit = TRUE, {
+  observeEvent(list(input$add_rod, input$rod_uiv, input$rod_liv, input$rod_contouring, spine_segmental_planning_df), ignoreInit = TRUE, {
     if(input$add_rod){
       if(nrow(spine_segmental_planning_df$pso_df) > 0){
         pso_vec <- spine_segmental_planning_df$pso_df$level

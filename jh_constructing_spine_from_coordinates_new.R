@@ -1413,73 +1413,95 @@ jh_rotate_translate_vert_list_coord_function <- function(vert_coord_list,
   
 }
 jh_calculate_pso_coordinates_function <- function(vertebral_coord_list, pso_angle) {
-  sp <- vertebral_coord_list$sp
-  ip <- vertebral_coord_list$ip
-  ia <- vertebral_coord_list$ia
-  sa <- vertebral_coord_list$sa
+  sp <- as.numeric(vertebral_coord_list$sp)
+  ip <- as.numeric(vertebral_coord_list$ip)
+  ia <- as.numeric(vertebral_coord_list$ia)
+  sa <- as.numeric(vertebral_coord_list$sa)
   
-  # Vector from sa to sp and sa to ip
-  sa_sp_vec <- c(sp[[1]] - sa[[1]], sp[[2]] - sa[[2]])
-  sa_ip_vec <- c(ip[[1]] - sa[[1]], ip[[2]] - sa[[2]])
+  # ── Anterior midpoint = hinge/vertex of PSO wedge ─────────────────────────
+  anterior_mid <- (sa + ia) / 2
   
-  # Maximum angle = angle at sa between old sp and ip
-  cos_max <- sum(sa_sp_vec * sa_ip_vec) / (sqrt(sum(sa_sp_vec^2)) * sqrt(sum(sa_ip_vec^2)))
+  # ── Maximum angle = angle at anterior_mid between sp and ip ──────────────
+  am_sp_vec <- sp - anterior_mid
+  am_ip_vec <- ip - anterior_mid
+  
+  cos_max <- sum(am_sp_vec * am_ip_vec) / 
+    (sqrt(sum(am_sp_vec^2)) * sqrt(sum(am_ip_vec^2)))
   max_angle_deg <- acos(clamp(cos_max, -1, 1)) * 180 / pi
   
-  # Clamp pso_angle to maximum
+  # ── Clamp pso_angle to maximum ────────────────────────────────────────────
   pso_angle_clamped <- min(pso_angle, max_angle_deg)
   theta <- pso_angle_clamped * pi / 180
   
-  # Build both rotation directions
-  rot_ccw <- matrix(c(cos(theta), -sin(theta),  sin(theta), cos(theta)), nrow = 2, byrow = TRUE)
+  # ── Rotate superior half (sp and sa) around anterior_mid ─────────────────
+  # Try both directions, pick the one that moves sp closer to ip
+  rot_ccw <- matrix(c(cos(theta), -sin(theta), sin(theta),  cos(theta)), nrow = 2, byrow = TRUE)
   rot_cw  <- matrix(c(cos(theta),  sin(theta), -sin(theta), cos(theta)), nrow = 2, byrow = TRUE)
   
-  new_sp_ccw <- as.numeric(c(sa[[1]], sa[[2]]) + rot_ccw %*% sa_sp_vec)
-  new_sp_cw  <- as.numeric(c(sa[[1]], sa[[2]]) + rot_cw  %*% sa_sp_vec)
+  rotate_around <- function(point, center, rot_matrix){
+    as.numeric(center + rot_matrix %*% (point - center))
+  }
+  
+  new_sp_ccw <- rotate_around(sp, anterior_mid, rot_ccw)
+  new_sp_cw  <- rotate_around(sp, anterior_mid, rot_cw)
   
   # Correct rotation moves sp closer to ip
-  dist_ccw <- sqrt(sum((new_sp_ccw - c(ip[[1]], ip[[2]]))^2))
-  dist_cw  <- sqrt(sum((new_sp_cw  - c(ip[[1]], ip[[2]]))^2))
+  dist_ccw <- sqrt(sum((new_sp_ccw - ip)^2))
+  dist_cw  <- sqrt(sum((new_sp_cw  - ip)^2))
   
-  new_sp <- if(dist_ccw < dist_cw) new_sp_ccw else new_sp_cw
+  if(dist_ccw < dist_cw){
+    rot_matrix <- rot_ccw
+  } else {
+    rot_matrix <- rot_cw
+  }
   
-  list(sp = new_sp, ip = ip, ia = ia, sa = sa)
+  new_sp <- rotate_around(sp, anterior_mid, rot_matrix)
+  new_sa <- rotate_around(sa, anterior_mid, rot_matrix)
+  
+  list(sp = new_sp, ip = ip, ia = ia, sa = new_sa)
 }
 
-# Helper to clamp a value between min and max
 clamp <- function(x, min_val, max_val) max(min_val, min(max_val, x))
 
 
-# 
 # jh_calculate_pso_coordinates_function <- function(vertebral_coord_list, pso_angle) {
-#   # Extract coordinates
 #   sp <- vertebral_coord_list$sp
 #   ip <- vertebral_coord_list$ip
 #   ia <- vertebral_coord_list$ia
 #   sa <- vertebral_coord_list$sa
 #   
-#   # Convert angle to radians
-#   theta <- pso_angle * pi / 180
-#   
-#   # Compute the new sp coordinate
-#   # Define the vector from sa to sp
+#   # Vector from sa to sp and sa to ip
 #   sa_sp_vec <- c(sp[[1]] - sa[[1]], sp[[2]] - sa[[2]])
+#   sa_ip_vec <- c(ip[[1]] - sa[[1]], ip[[2]] - sa[[2]])
 #   
-#   # Compute the rotation matrix
-#   rot_matrix <- matrix(c(cos(theta), -sin(theta), sin(theta), cos(theta)), nrow = 2)
+#   # Maximum angle = angle at sa between old sp and ip
+#   cos_max <- sum(sa_sp_vec * sa_ip_vec) / (sqrt(sum(sa_sp_vec^2)) * sqrt(sum(sa_ip_vec^2)))
+#   max_angle_deg <- acos(clamp(cos_max, -1, 1)) * 180 / pi
 #   
-#   # Apply the rotation to sa_sp_vec
-#   new_sp_vec <- rot_matrix %*% sa_sp_vec
+#   # Clamp pso_angle to maximum
+#   pso_angle_clamped <- min(pso_angle, max_angle_deg)
+#   theta <- pso_angle_clamped * pi / 180
 #   
-#   # Compute the new sp coordinate
-#   new_sp <- c(sa[[1]] + new_sp_vec[1], sa[[2]] + new_sp_vec[2])
-#   # new_sp <- list(x = sa[[1]] + new_sp_vec[1], y = sa$y + new_sp_vec[2])
+#   # Build both rotation directions
+#   rot_ccw <- matrix(c(cos(theta), -sin(theta),  sin(theta), cos(theta)), nrow = 2, byrow = TRUE)
+#   rot_cw  <- matrix(c(cos(theta),  sin(theta), -sin(theta), cos(theta)), nrow = 2, byrow = TRUE)
 #   
-#   # Return updated coordinate list
-#   updated_vertebral_coords <- list(sp = new_sp, ip = ip, ia = ia, sa = sa)
+#   new_sp_ccw <- as.numeric(c(sa[[1]], sa[[2]]) + rot_ccw %*% sa_sp_vec)
+#   new_sp_cw  <- as.numeric(c(sa[[1]], sa[[2]]) + rot_cw  %*% sa_sp_vec)
 #   
-#   return(updated_vertebral_coords)
+#   # Correct rotation moves sp closer to ip
+#   dist_ccw <- sqrt(sum((new_sp_ccw - c(ip[[1]], ip[[2]]))^2))
+#   dist_cw  <- sqrt(sum((new_sp_cw  - c(ip[[1]], ip[[2]]))^2))
+#   
+#   new_sp <- if(dist_ccw < dist_cw) new_sp_ccw else new_sp_cw
+#   
+#   list(sp = new_sp, ip = ip, ia = ia, sa = sa)
 # }
+
+# Helper to clamp a value between min and max
+# clamp <- function(x, min_val, max_val) max(min_val, min(max_val, x))
+
+
 
 
 jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_df = tibble(), 
@@ -1616,7 +1638,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t11")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t11)
+    spine_vert_list$t11 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t11, pso_angle = pso_list$t11)
     sa_adjustment_list$t10 <- sa_adjustment_list$t10 + pso_list$t11
   }
   
@@ -1632,7 +1654,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t10")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t10)
+    spine_vert_list$t10 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t10, pso_angle = pso_list$t10)
     sa_adjustment_list$t9 <- sa_adjustment_list$t9 + pso_list$t10
   }
   
@@ -1648,7 +1670,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t9")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t9)
+    spine_vert_list$t9 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t9, pso_angle = pso_list$t9)
     sa_adjustment_list$t8 <- sa_adjustment_list$t8 + pso_list$t9
   }
   
@@ -1664,7 +1686,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t8")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t8)
+    spine_vert_list$t8 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t8, pso_angle = pso_list$t8)
     sa_adjustment_list$t7 <- sa_adjustment_list$t7 + pso_list$t8
   }
   
@@ -1681,7 +1703,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t7")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t7)
+    spine_vert_list$t7 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t7, pso_angle = pso_list$t7)
     sa_adjustment_list$t6 <- sa_adjustment_list$t6 + pso_list$t7
   }
   
@@ -1697,7 +1719,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t6")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t6)
+    spine_vert_list$t6 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t6, pso_angle = pso_list$t6)
     sa_adjustment_list$t5 <- sa_adjustment_list$t5 + pso_list$t6
   }
   
@@ -1713,7 +1735,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t5")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t5)
+    spine_vert_list$t5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t5, pso_angle = pso_list$t5)
     sa_adjustment_list$t4 <- sa_adjustment_list$t4 + pso_list$t5
   }
   
@@ -1729,7 +1751,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t4")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t4)
+    spine_vert_list$t4 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t4, pso_angle = pso_list$t4)
     sa_adjustment_list$t3 <- sa_adjustment_list$t3 + pso_list$t4
   }
   
@@ -1745,7 +1767,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t3")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t3)
+    spine_vert_list$t3 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t3, pso_angle = pso_list$t3)
     sa_adjustment_list$t2 <- sa_adjustment_list$t2 + pso_list$t3
   }
   
@@ -1761,7 +1783,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t2")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t2)
+    spine_vert_list$t2 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t2, pso_angle = pso_list$t2)
     sa_adjustment_list$t1 <- sa_adjustment_list$t1 + pso_list$t2
   }
   
@@ -1777,7 +1799,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "t1")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$t1)
+    spine_vert_list$t1 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t1, pso_angle = pso_list$t1)
     sa_adjustment_list$c7 <- sa_adjustment_list$c7 + pso_list$t1
   }
   
@@ -1793,7 +1815,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   ##### next vert:
   if(any(names(pso_list)== "c7")){
-    spine_vert_list$l5 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$l5, pso_angle = pso_list$c7)
+    spine_vert_list$c7 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$c7, pso_angle = pso_list$c7)
     sa_adjustment_list$c6 <- sa_adjustment_list$c6 + pso_list$c7
   }
   
