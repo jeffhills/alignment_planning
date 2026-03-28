@@ -2077,8 +2077,7 @@ server <- function(input, output, session) {
         spine_orientation           = spine_orientation(),
         adjust_for_pt_change        = TRUE
       )
-      # print("made it to 2143")
-      
+
       hypotenuse_length <- max(spine_build_list_reactivevalues$planned_spine_list$vert_coord_df$y)
       
       spine_simulation_planning_reactive_list$c2_tilt_normal_df <- tibble(
