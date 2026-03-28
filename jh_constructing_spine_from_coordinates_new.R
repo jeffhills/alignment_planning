@@ -1781,6 +1781,7 @@ jh_construct_adjusted_spine_list_function <- function(segment_angle_adjustment_d
   
   # rotated_translated_spine_list$t3 <- t3_rot_trans_list$vert_coord
   
+  
   ##### next vert:
   if(any(names(pso_list)== "t2")){
     spine_vert_list$t2 <- jh_calculate_pso_coordinates_function(vertebral_coord_list = spine_vert_list$t2, pso_angle = pso_list$t2)
