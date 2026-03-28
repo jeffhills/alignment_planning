@@ -1464,12 +1464,25 @@ server <- function(input, output, session) {
                         #   spine_orientation() == "right" & fem_head_center[[1]] > s1_center[[1]] ~ 1,
                         #   spine_orientation() == "right" & fem_head_center[[1]] < s1_center[[1]] ~ -1
                         # )
-                        pt_orientation_modifier <- case_when(
-                          spine_orientation() == "left"  & fem_head_center[[1]] > s1_center[[1]] ~ 1,   # facing left, normal PT
-                          spine_orientation() == "left"  & fem_head_center[[1]] < s1_center[[1]] ~ -1,  # facing left, anteverted
-                          spine_orientation() == "right" & fem_head_center[[1]] < s1_center[[1]] ~ 1,   # facing right, normal PT
-                          spine_orientation() == "right" & fem_head_center[[1]] > s1_center[[1]] ~ -1   # facing right, anteverted
-                        )
+                        # pt_orientation_modifier <- case_when(
+                        #   spine_orientation() == "left"  & fem_head_center[[1]] > s1_center[[1]] ~ 1,   # facing left, normal PT
+                        #   spine_orientation() == "left"  & fem_head_center[[1]] < s1_center[[1]] ~ -1,  # facing left, anteverted
+                        #   spine_orientation() == "right" & fem_head_center[[1]] < s1_center[[1]] ~ 1,   # facing right, normal PT
+                        #   spine_orientation() == "right" & fem_head_center[[1]] > s1_center[[1]] ~ -1   # facing right, anteverted
+                        # )
+                        if(spine_orientation() == "left"){
+                          if(fem_head_center[[1]] < s1_center[[1]]){
+                            pt_orientation_modifier <- 1 # "normal"
+                          }else{
+                            pt_orientation_modifier <- -1 # "anteverted"
+                          }
+                        }else{
+                          if(fem_head_center[[1]] > s1_center[[1]]){
+                            pt_orientation_modifier <- 1 # "normal"
+                          }else{
+                            pt_orientation_modifier <- -1 #"anteverted"
+                          }
+                        }
                         
                         alignment_parameters_reactivevalues_list$pelvic_tilt <- asin(fem_head_to_s1_x_length/fem_head_to_s1_length)*180/pi*pt_orientation_modifier
                         
